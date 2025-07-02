@@ -1,89 +1,102 @@
-import json
 import os
-from datetime import datetime, timezone
-import pytz # For robust timezone handling
+import dialogflow_v2 as dialogflow
 from google.cloud import firestore
+from flask import Flask, request, jsonify
+from datetime import datetime, timedelta, timezone
 
-# Initialize Firestore client
-# Netlify will automatically use GOOGLE_APPLICATION_CREDENTIALS_JSON env var
+app = Flask(__name__)
+
+# Initialize Firestore DB
+# Ensure GOOGLE_APPLICATION_CREDENTIALS environment variable is set in Netlify
 db = firestore.Client()
 
-def handler(event, context):
-    try:
-        dialogflow_request = json.loads(event['body'])
-        intent_name = dialogflow_request['queryResult']['intent']['displayName']
-        
-        # Extract user_client_id from the custom payload we send from app.js
-        user_client_id = dialogflow_request.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
-        
-        if not user_client_id:
-            # Fallback to session ID if custom user_client_id is not found
-            # This is less reliable for persistence across sessions, but better than nothing
-            user_client_id = dialogflow_request['session'].split('/')[-1]
-            print(f"Warning: user_client_id not found in payload, using session ID: {user_client_id}")
+@app.route('/.netlify/functions/kiki_webhook', methods=['POST'])
+def webhook():
+    req = request.get_json(silent=True, force=True)
 
-        fulfillment_text = "I'm sorry, I didn't understand that. Can you rephrase?"
+    print(f"Dialogflow Request: {req}")
 
-        # --- Handle 'set.reminder' intent ---
-        if intent_name == 'set.reminder':
-            params = dialogflow_request['queryResult']['parameters']
-            task = params.get('task')
-            date_time_str = params.get('date-time') # e.g., "2025-07-03T10:00:00+08:00"
+    # Extract intent display name
+    intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
+    print(f"Intent Display Name: {intent_display_name}")
 
-            if not task or not date_time_str:
-                fulfillment_text = "Sorry, I need both the task and the time for the reminder."
-            else:
-                try:
-                    # Parse the ISO format string provided by Dialogflow
-                    remind_at_dt = datetime.fromisoformat(date_time_str)
-                    # Convert to UTC for consistent storage in Firestore
-                    remind_at_utc = remind_at_dt.astimezone(timezone.utc)
+    if intent_display_name == 'set.reminder':
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        task = parameters.get('task')
+        date_time_str = parameters.get('date-time')
 
-                    # Add reminder to Firestore
-                    reminders_ref = db.collection('reminders')
-                    new_reminder_doc = {
-                        'task': task,
-                        'remind_at': remind_at_utc,
-                        'user_client_id': user_client_id, # Link to the specific browser
-                        'status': 'pending', # Status for tracking (client-side will update to 'completed')
-                        'created_at': datetime.now(timezone.utc)
+        # Get user client ID from custom payload
+        user_client_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
+        print(f"User Client ID: {user_client_id}")
+
+        if not task or not date_time_str:
+            print("Missing task or date-time parameter.")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I couldn't understand the task or time for the reminder. Could you please specify it again?"
+            })
+
+        try:
+            # Parse the date-time string from Dialogflow
+            # It comes in ISO 8601 format like "2025-07-03T01:45:00+08:00"
+            # Parse with timezone awareness
+            reminder_dt_obj = datetime.fromisoformat(date_time_str)
+
+            # Firestore automatically handles timezone-aware datetimes as Timestamps
+            # No explicit conversion to UTC needed here, Firestore stores it as-is and correctly
+            # provides it back as a Timestamp object.
+
+            reminder_timestamp = reminder_dt_obj # This is a datetime object, Firestore will convert it
+
+            # Save to Firestore
+            reminder_data = {
+                'task': task,
+                'remind_at': reminder_timestamp,
+                'user_client_id': user_client_id, # Save the client ID
+                'status': 'pending',
+                'created_at': firestore.SERVER_TIMESTAMP # Use server timestamp for creation
+            }
+            db.collection('reminders').add(reminder_data)
+            print(f"Reminder saved to Firestore: {reminder_data}")
+
+            # Format the time for the user-friendly response
+            # Display time in local timezone for the user if needed, or keep ISO for clarity
+            # For user display, you might want to format it nicely:
+            user_friendly_time_str = reminder_dt_obj.strftime("%I:%M %p on %B %d, %Y") # e.g., "01:45 AM on July 03, 2025"
+
+            # Construct the response for Dialogflow
+            response = {
+                "fulfillmentMessages": [
+                    {"text": {"text": [f"Got it! I'll remind you to '{task}' at {user_friendly_time_str}."]}},
+                    {"text": {"text": ["Reminder placed successfully."]}
+                    # REMOVE OR COMMENT OUT THIS LINE IF IT'S PRESENT
+                    # {"text": {"text": [f"{task}|{reminder_timestamp}"]}}
                     }
-                    reminders_ref.add(new_reminder_doc) 
+                ]
+                # If you prefer a simpler fulfillmentText (single message displayed):
+                # "fulfillmentText": f"Got it! I'll remind you to '{task}' at {user_friendly_time_str}. Reminder placed successfully."
+            }
+            return jsonify(response)
 
-                    # Format datetime for user-friendly response (optional, can be simplified)
-                    # Example: "2025-07-03 at 10:00 AM" (adjust based on remind_at_dt's original timezone)
-                    # For simplicity, let's just show what Dialogflow provided, or a basic UTC format
-                    display_time = remind_at_dt.strftime('%Y-%m-%d %H:%M') # Use original local time
-                    fulfillment_text = f"Alright, I've noted that. I'll alert you to '{task}' on {display_time} if you have my page open."
+        except ValueError as e:
+            print(f"Date parsing error: {e}")
+            return jsonify({
+                "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
+            })
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
+            })
 
-                except ValueError:
-                    fulfillment_text = "I couldn't understand that date and time. Please try again with a clearer date or time."
-                except Exception as e:
-                    print(f"Error saving reminder to Firestore: {e}")
-                    fulfillment_text = "There was an issue saving your reminder. Please try again."
+    # Add other intent handlers here if you have them
+    # For any other intent, you might just return a simple response
+    return jsonify({
+        "fulfillmentText": "This is a default response. Please make sure your Dialogflow intents are set up to use webhook fulfillment for specific actions."
+    })
 
-        # Prepare Dialogflow response
-        response = {
-            "fulfillmentMessages": [
-                {
-                    "text": {
-                        "text": [fulfillment_text]
-                    }
-                }
-            ]
-        }
 
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json'
-            },
-            'body': json.dumps(response)
-        }
-
-    except Exception as e:
-        print(f"Unhandled error in webhook: {e}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({"error": str(e)})
-        }
+if __name__ == '__main__':
+    # This is for local testing only. Netlify functions run as handlers.
+    # To test locally, set GOOGLE_APPLICATION_CREDENTIALS environment variable
+    # and run 'flask run' or 'python kiki_webhook.py'
+    app.run(debug=True, port=8000)
