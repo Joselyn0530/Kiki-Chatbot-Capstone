@@ -1,0 +1,4 @@
+Flask
+google-cloud-firestore
+dialogflow
+gunicorn  # Essential for running Flask apps on Render
