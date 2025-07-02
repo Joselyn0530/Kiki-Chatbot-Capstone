@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiki Chatbot</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/df-messenger.js"></script>
+    <df-messenger
+        intent="WELCOME"
+        chat-title="Kiki"
+        agent-id="03c9c63b-dbcb-4b2e-ba86-9a5814ca1ea5"
+        language-code="en"
+    ></df-messenger>
+    <style>
+      df-messenger {
+        --df-messenger-bot-message: #878fac;
+        --df-messenger-button-titlebar-color: #afaeef;
+        --df-messenger-chat-background-color: #fafafa;
+        --df-messenger-font-color: white;
+        --df-messenger-send-icon: #878fac;
+        --df-messenger-user-message: #479b3d;
+      }
+    </style>
+
+</head>
+<body>
+    <h1>Welcome to Kiki! Your Personal Reminder Bot.</h1>
+    <p>Say something like: "Remind me to call grandma tomorrow at 10 AM."</p>
+
+    <div id="status-messages" style="margin-top: 20px; color: green;"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+
+    <script src="app.js"></script>
+</body>
+</html>

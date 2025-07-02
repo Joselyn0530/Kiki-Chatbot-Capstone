@@ -1,0 +1,2 @@
+google-cloud-firestore
+pytz # For robust timezone handling in Python
