@@ -1,18 +1,167 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiki Chatbot</title>
-    <link rel="stylesheet" href="style.css">
-
-    <script src="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/df-messenger.js"></script>
-    <df-messenger
-        intent="WELCOME"
-        chat-title="Kiki"
-        agent-id="03c9c63b-dbcb-4b2e-ba86-9a5814ca1ea5"
-        language-code="en"
-    ></df-messenger>
+    <meta charset="utf-8"/>
+    <title> Kiki Games Hub </title>
+    <style>
+        body { margin:0; font-family: sans-serif; display: flex; height: 100vh; }
+        .content {
+          flex: 1;
+          padding: 40px;
+          overflow-y: auto;
+          font-size: 1.3em;
+          transition: background 0.3s, color 0.3s;
+          display: none;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+        }
+        .intro {
+      background: url('background.gif') no-repeat center center;
+      background-size: cover;
+      display: flex;
+    }
+        .game-select { background: #fff0f0; }
+        .memory-match { background: #004d40; color: #fff; }
+        .button {
+      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3); width: 120px; height: 120px; font-size: 1.3em; cursor: pointer; margin: 150px; border: 3px solid #ffffff; border-radius: 50%; background: #fb0d45; color: #ffffff; text-align: center; }
+        .game-option { display: flex; gap: 50px; justify-content: center; margin-top: 40px; flex-wrap: wrap; }
+        .square-btn { width: 200px; height: 200px; font-size: 1.5em; cursor: pointer; border: none; border-radius: 20px; background: #333; color: #fff; }
+        #board { display: grid; grid-template-columns: repeat(4, 100px); gap: 15px; justify-content: center; margin-top: 30px; }
+        .card { width: 100px; height: 100px; background: #ccc; font-size: 2em; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 10px; }
+        .matched { background: #8f8; pointer-events: none; }
+        #startBtn, #playAgainBtn { margin-top: 30px; padding: 15px 30px; font-size: 1.3em; cursor: pointer; }
+        #playAgainBtn { display: none; border-radius: 12px; }
+        #levelSelect button { font-size: 1.3em; padding: 15px 30px; margin: 5px; border-radius: 12px; }
+        #levelSelect { margin-bottom: 30px; }
+        #description { background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; display: inline-block; font-size: 1.3em; max-width: 700px; line-height: 1.5; }
+        #homeBtn { position: fixed; top: 20px; left: 20px; font-size: 1.5em; padding: 10px 20px; display: none; }
+      
+        .button:hover,
+        .square-btn:hover,
+        #startBtn:hover,
+        #playAgainBtn:hover,
+        #levelSelect button:hover,
+        #restartBtn:hover,
+        #homeBtn:hover {
+          transform: scale(1.05);
+          opacity: 0.9;
+          transition: all 0.2s ease-in-out;
+        }
+        
+    @keyframes bounceFade {
+      0%, 100% {
+        transform: translateY(0);
+        opacity: 0.95;
+      }
+      50% {
+        transform: translateY(-8px);
+        opacity: 1;
+      }
+    }
+    .bounce-fade {
+      animation: bounceFade 2.5s ease-in-out infinite;
+      text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
+    }
+    
+    
+    #helpIcon {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      font-size: 1.7em;
+      background: #fff;
+      border-radius: 50%;
+      border: 1px solid #999;
+      width: 45px;
+      height: 45px;
+      text-align: center;
+      line-height: 45px;
+      cursor: pointer;
+      box-shadow: 1px 1px 5px rgba(0,0,0,0.2);
+    }
+    #helpTooltip {
+      position: fixed;
+      bottom: 70px;
+      left: 20px;
+      background: #333;
+      color: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 1.5em;
+      display: none;
+      width: 250px;
+    }
+    
+    
+    #slogan {
+      font-size: 2em;
+      font-weight: bold;
+      color: #ff3363; /* Dark pink */
+      text-shadow: 2px 2px 0 #ffffff, -2px -2px 0 #ffffff, 2px -2px 0 #ffffff, -2px 2px 0 #ffffff;
+      margin-top: 0;
+      padding-top: 20px;
+      max-width: 90%;
+      text-align: center;
+      font-family: 'Arial Black', sans-serif;
+      position: absolute;
+      top: 0;
+      width: 100%;
+      z-index: 1;
+    }
+    
+    </style>
+</head>
+<body>
+    <audio autoplay="True" id="bgMusic" loop="True"><source src="music.mp3" type="audio/mpeg"/>Your browser does not support the audio element.</audio>
+    <button id="musicToggle" style="position: fixed; bottom: 20px; left: 75px; font-size: 1.5em; width: 48px; height: 48px; border-radius: 50%; background: #fff; border: 1px solid #999; cursor: pointer; text-align: center; line-height: 40px; box-shadow: 1px 1px 5px rgba(0,0,0,0.2); z-index: 1000;">🔊</button>
+    <button id="restartBtn" onclick="restartGame()" style="position: fixed; top: 20px; right: 20px; font-size: 1.3em; padding: 10px 20px; background: #fff; border: 1px solid #999; color: #000; display: none; border-radius: 2px; cursor: pointer;">Restart</button>
+    <button id="homeBtn" onclick="goHome()" style="position: fixed; top: 20px; left: 20px; font-size: 1.5em; padding: 10px 20px; background: #fff; border: 1px solid #999; color: #000; display: none; border-radius: 2px; cursor: pointer;">Home</button>
+    
+    <div class="content intro" id="intro">
+        <h1 class="bounce-fade" style="font-size: 2.2em; font-weight: bold; margin-top: 50px; ">Kiki Games Hub️</h1>
+        <p id="slogan">Feeling lonely? Kiki is your gentle friend.<br/>Come chat with us and play together.</p>
+        <button class="button" onclick="showGameSelect()">Play</button>
+    </div>
+    
+    <div class="content game-select" id="gameSelect">
+        <h1 style="font-size: 1.7em; font-weight: bold;">Welcome to Kiki Games Hub</h1>
+        <p style="font-size: 1.5em;">Select the game you want!</p>
+        <div class="game-option">
+            <button class="square-btn" onclick="showSection('memoryMatch')" style="background: url('background3.jpg') no-repeat center center; background-size: cover; border: 3px solid #000000; border-radius: 20px;"></button>
+            <button class="square-btn" onclick="showSection('stroopEffect')" style="background: url('background4.jpg') no-repeat center center; background-size: cover; border: 3px solid #000000; border-radius: 20px;"></button>
+        </div>
+    </div>
+    
+    <div class="content memory-match" id="memoryMatch">
+        <h1 style="font-size: 1.5em; font-weight: bold;">🍓🍎 Memory Match 🍒🍇</h1>
+        <p id="description" style="position: relative;">
+            Memory Match is a simple and fun game to exercise your memory. Flip cards to find matching fruit pairs, earn points, and see how quickly you can match them all. Play at your own pace and enjoy keeping your mind active!
+            <button onclick="speakDescription()" style="position: absolute; bottom: 8px; right: 5px; font-size: 1em; background: none; border: none; cursor: pointer;">🔊</button>
+        </p>
+        <div id="levelSelect">
+            <button onclick="setLevel('easy')">Easy (4 Pairs)</button>
+            <button onclick="setLevel('medium')">Medium (5 Pairs)</button>
+            <button onclick="setLevel('hard')">Hard (6 Pairs)</button>
+        </div>
+        <p style="font-size: 1.4em; margin-top: 15px; color: #fff;">Choose the level you want to play.</p>
+        <p id="levelMsg" style="font-size: 1.3em; margin-top: 20px;"></p>
+        <button id="startBtn" onclick="startGame()" style="display:none; border-radius: 15px;">▶️ Start</button>
+        <div id="statusBox" style="margin-top: 20px; font-size: 1.3em; display: none;">
+            <span id="scoreDisplay">Score: 0</span> | 
+            <span id="timeDisplay">Time: 0s</span>
+        </div>
+        <div id="board"></div>
+        <button id="playAgainBtn" onclick="startGame()">🔄 Play Again</button>
+    </div>
+    
+    <div class="content" id="stroopEffect">
+        <h1 style="font-size: 1.5em; font-weight: bold;">🎨 Stroop Effect Game</h1>
+        <p>This is a placeholder for the Stroop Effect game. Coming soon!</p>
+    </div>
+    
+    <df-messenger agent-id="03c9c63b-dbcb-4b2e-ba86-9a5814ca1ea5" chat-title="Kiki" intent="WELCOME" language-code="en"></df-messenger>
     <style>
       df-messenger {
         --df-messenger-bot-message: #878fac;
@@ -24,16 +173,327 @@
       }
     </style>
 
-</head>
-<body>
-    <h1>Welcome to Kiki! Your Personal Reminder Bot.</h1>
-    <p>Say something like: "Remind me to call grandma tomorrow at 10 AM."</p>
-
-    <div id="status-messages" style="margin-top: 20px; color: green;"></div>
-
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
 
-    <script src="app.js"></script>
+    <div id="status-messages" style="position: fixed; bottom: 130px; right: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1); z-index: 1000; font-size: 0.9em; color: #333; max-width: 250px;">
+        </div>
+
+    <script>
+        // 1. Firebase Configuration - REPLACE WITH YOUR ACTUAL CONFIG
+        // You get this from Firebase Console -> Project settings -> General -> Your apps -> Web app config
+        const firebaseConfig = {
+            apiKey: "AIzaSyCr5QOkwsIjXHr6DLE9J847dJTrxSX3t7s",
+            authDomain: "kikichatbot-5d6a1.firebaseapp.com",
+            projectId: "kikichatbot-5d6a1",
+            storageBucket: "kikichatbot-5d6a1.firebasestorage.app",
+            messagingSenderId: "Y993542388047",
+            appId: "1:993542388047:web:23fe420e3539d92e6c6d3a",
+            measurementId: "G-ZHD2D5T915"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore(); // Get a reference to Firestore
+
+        // 2. User ID Management
+        let userClientId = localStorage.getItem('kiki_user_client_id');
+        if (!userClientId) {
+            userClientId = crypto.randomUUID(); // Generate a unique ID
+            localStorage.setItem('kiki_user_client_id', userClientId);
+            console.log("New Kiki user ID generated:", userClientId);
+        } else {
+            console.log("Existing Kiki user ID:", userClientId);
+        }
+
+        // 3. Setup Dialogflow Messenger to send userClientId
+        const dfMessenger = document.querySelector('df-messenger');
+        if (dfMessenger) {
+            dfMessenger.addEventListener('df-request-sent', (event) => {
+                const requestBody = event.detail.requestBody;
+                if (!requestBody.queryParams) {
+                    requestBody.queryParams = {};
+                }
+                if (!requestBody.queryParams.payload) {
+                    requestBody.queryParams.payload = {};
+                }
+                // Ensure the payload is an object
+                if (typeof requestBody.queryParams.payload !== 'object' || requestBody.queryParams.payload === null) {
+                    requestBody.queryParams.payload = {};
+                }
+                requestBody.queryParams.payload.user_client_id = userClientId;
+                console.log("Dialogflow request sent with user_client_id:", requestBody.queryParams.payload.user_client_id);
+            });
+        } else {
+            console.error("df-messenger element not found. Make sure it's in index.html.");
+        }
+
+        // 4. Request Notification Permission
+        function requestNotificationPermission() {
+            if ('Notification' in window) {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        console.log('Notification permission granted.');
+                        document.getElementById('status-messages').innerText = "Notifications: Enabled. Kiki can send reminders.";
+                    } else if (permission === 'denied') {
+                        console.warn('Notification permission denied.');
+                        document.getElementById('status-messages').innerText = "Notifications: Denied. Kiki cannot send desktop reminders.";
+                    } else {
+                        console.log('Notification permission dismissed.');
+                        document.getElementById('status-messages').innerText = "Notifications: Permission pending. Click the chatbot and allow if prompted.";
+                    }
+                }).catch(error => {
+                    console.error("Error requesting notification permission:", error);
+                    document.getElementById('status-messages').innerText = "Notifications: Error getting permission.";
+                });
+            } else {
+                console.warn('This browser does not support notifications.');
+                document.getElementById('status-messages').innerText = "Notifications: Your browser does not support desktop notifications.";
+            }
+        }
+
+        // Request permission when the page loads
+        document.addEventListener('DOMContentLoaded', requestNotificationPermission);
+
+
+        // 5. Load and Schedule Reminders from Firestore
+        async function loadAndScheduleReminders() {
+            if (!userClientId) {
+                console.error("Cannot load reminders: userClientId is not set.");
+                return;
+            }
+
+            const now = new Date();
+            try {
+                const remindersRef = db.collection('reminders');
+                const snapshot = await remindersRef
+                    .where('user_client_id', '==', userClientId)
+                    .where('status', '==', 'pending')
+                    .where('remind_at', '>', now) // Only future reminders
+                    .orderBy('remind_at', 'asc') // Order them to handle closest first
+                    .get();
+
+                if (snapshot.empty) {
+                    console.log('No pending future reminders found for this user.');
+                    return;
+                }
+
+                snapshot.forEach(doc => {
+                    const reminder = doc.data();
+                    const reminderId = doc.id;
+                    const remindAt = reminder.remind_at.toDate(); // Convert Firestore Timestamp to JS Date
+
+                    console.log(`Scheduling reminder: ${reminder.task} at ${remindAt}`);
+                    scheduleReminder(reminder.task, remindAt, reminderId);
+                });
+
+            } catch (error) {
+                console.error("Error loading and scheduling reminders:", error);
+                document.getElementById('status-messages').innerText = "Error loading reminders. Check console.";
+            }
+        }
+
+        // Set a timeout for a reminder
+        function scheduleReminder(task, remindAtDate, reminderId) {
+            const now = new Date();
+            const delay = remindAtDate.getTime() - now.getTime(); // Delay in milliseconds
+
+            if (delay <= 0) {
+                console.warn(`Reminder for "${task}" is in the past or current (${delay}ms), triggering immediately.`);
+                displayNotification(task, reminderId);
+                return;
+            }
+
+            setTimeout(() => {
+                displayNotification(task, reminderId);
+            }, delay);
+        }
+
+        // Display the browser notification
+        async function displayNotification(task, reminderId) {
+            if (Notification.permission === 'granted') {
+                new Notification('Kiki Reminder!', {
+                    body: `Don't forget: ${task}`,
+                    icon: 'https://www.gstatic.com/images/branding/product/2x/dialogflow_48dp.png' // A generic icon
+                });
+
+                // Update reminder status in Firestore
+                try {
+                    await db.collection('reminders').doc(reminderId).update({
+                        status: 'completed',
+                        completed_at: firebase.firestore.FieldValue.serverTimestamp() // Firestore timestamp
+                    });
+                    console.log(`Reminder "${task}" (ID: ${reminderId}) marked as completed in Firestore.`);
+                } catch (error) {
+                    console.error(`Error updating reminder status for ${reminderId}:`, error);
+                }
+            } else {
+                console.warn('Notification permission not granted. Cannot display notification.');
+                document.getElementById('status-messages').innerText = "Notifications: Permission not granted. Reminder not shown.";
+            }
+        }
+
+        // Call to load and schedule reminders once the page is fully loaded
+        document.addEventListener('DOMContentLoaded', loadAndScheduleReminders);
+    </script>
+    <script>
+      document.getElementById('intro').style.display = 'flex';
+      let level = ''; let emojis = [];
+      const allEmojis = ['🍎','🍌','🍇','🍓','🍉','🍒'];
+      const board = document.getElementById('board');
+      const startBtn = document.getElementById('startBtn');
+      const playAgainBtn = document.getElementById('playAgainBtn');
+      let flipped = [], matched = 0, score = 0, timerInterval = null;
+      let startTime, endTime; let elapsedSeconds = 0;
+    
+      function restartGame() { if (confirm("Are you sure you want to restart the game?")) { setLevel(level); startGame(); } }
+      function goHome() {
+        document.querySelectorAll('.content').forEach(s => s.style.display = 'none');
+        document.getElementById('intro').style.display = 'flex';
+        document.getElementById('homeBtn').style.display = 'none';
+        document.getElementById('statusBox').style.display = 'none';
+        document.getElementById('restartBtn').style.display = 'none';
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('levelMsg').innerText = "";
+        document.getElementById('playAgainBtn').style.display = 'none';
+        document.getElementById('board').innerHTML = "";
+        level = '';
+        emojis = [];
+        flipped = [];
+        matched = 0;
+        score = 0;
+        clearInterval(timerInterval);
+        timerInterval = null;
+        document.getElementById('scoreDisplay').innerText = "Score: 0";
+        document.getElementById('timeDisplay').innerText = "Time: 0s";
+        const levelInstruction = document.querySelector('#levelSelect + p');
+        if (levelInstruction) levelInstruction.style.display = 'inline-block';
+      }
+      function showGameSelect() {
+      document.querySelectorAll('.content').forEach(s => s.style.display = 'none');
+      const gameSelect = document.getElementById('gameSelect');
+      gameSelect.style.display = 'flex';
+      gameSelect.style.background = "url('background2.jpg') no-repeat center center";
+      gameSelect.style.backgroundSize = "cover";
+      document.getElementById('homeBtn').style.display = 'inline-block';
+    
+      // Set background3.jpg for the Memory Match button
+      const memoryBtn = [...document.querySelectorAll('.square-btn')].find(btn => btn.textContent.includes("Memory"));
+      if (memoryBtn) { // This will likely not work as there is no textContent for these buttons, only background image.
+                      // Consider using an ID or a data-attribute for selection if you need to manipulate specific game buttons.
+                      // For now, this line might not find anything if your buttons are purely background images.
+        memoryBtn.style.background = "url('background3.jpg') no-repeat center center";
+        memoryBtn.style.backgroundSize = "cover";
+        memoryBtn.style.color = "#fff";
+      }
+    }
+      function showSection(sectionId) {
+        document.querySelectorAll('.content').forEach(s => s.style.display = 'none');
+        document.getElementById(sectionId).style.display = 'block'; // Or 'flex' if it's a flex container
+        document.getElementById('homeBtn').style.display = 'inline-block';
+      }
+      function setLevel(selected) {
+        level = selected;
+        switch(level) { case 'easy': emojis = allEmojis.slice(0, 4).flatMap(e => [e, e]); board.style.gridTemplateColumns = 'repeat(4, 100px)'; break; // Ensure grid columns are set for easy
+                        case 'medium': emojis = allEmojis.slice(0, 5).flatMap(e => [e, e]); board.style.gridTemplateColumns = 'repeat(5, 100px)'; break; // Ensure grid columns are set for medium
+                        case 'hard': emojis = allEmojis.slice(0, 6).flatMap(e => [e, e]); board.style.gridTemplateColumns = 'repeat(6, 100px)'; break; // Ensure grid columns are set for hard
+        }
+        startBtn.style.display = 'inline-block';
+        document.getElementById('levelMsg').innerText = "You have selected " + selected + " level, click Start to play!";
+    const levelInstruction = document.querySelector('#levelSelect + p');
+    if (levelInstruction) levelInstruction.style.display = 'none';
+        document.getElementById('statusBox').style.display = 'none';
+        clearInterval(timerInterval); playAgainBtn.style.display = 'none'; board.innerHTML = '';
+    document.getElementById('restartBtn').style.display = 'none';
+      }
+      function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
+      function startGame() {
+        if (!level) { alert("Please select a level first!"); return; }
+        
+        board.innerHTML = '';
+    document.getElementById('restartBtn').style.display = 'inline-block'; // Show restart on game start
+    flipped = []; matched = 0;
+        
+        // This part is now handled in setLevel
+        // if (level === 'medium') { board.style.gridTemplateColumns = 'repeat(5, 100px)'; } else { board.style.gridTemplateColumns = 'repeat(4, 100px)'; }
+        
+        startBtn.style.display = 'none'; document.getElementById("levelMsg").innerText = "";
+        
+        score = 0; matched = 0; document.getElementById('statusBox').style.display = 'block'; document.getElementById('scoreDisplay').innerText = "Score: " + score; document.getElementById('timeDisplay').innerText = "Time: 0s";
+        if (timerInterval) clearInterval(timerInterval); timerInterval = setInterval(updateTimer, 1000);
+        playAgainBtn.style.display = 'none'; startTime = new Date();
+        const cards = shuffle([...emojis]);
+        cards.forEach((emoji) => { const div = document.createElement('div'); div.className = 'card'; div.dataset.emoji = emoji; div.innerHTML = ''; div.onclick = () => {
+          if (div.classList.contains('matched') || flipped.includes(div)) return;
+          div.innerHTML = emoji; flipped.push(div);
+          if (flipped.length === 2) {
+            const [c1, c2] = flipped;
+            if (c1.dataset.emoji === c2.dataset.emoji) {
+              c1.classList.add('matched'); c2.classList.add('matched'); matched += 2; score += 2; document.getElementById("scoreDisplay").innerText = "Score: " + score;
+              if (matched === emojis.length) {
+                setTimeout(() => {
+                  const finalScore = score; endTime = new Date(); const timeUsed = elapsedSeconds; clearInterval(timerInterval);
+                  alert(`Well done! Your score is ${finalScore}. Time used: ${timeUsed} seconds.`);
+                  playAgainBtn.style.display = 'inline-block'; document.getElementById('restartBtn').style.display = 'none';
+                  // Send score to Kiki chatbot - adjust as needed based on how you want to present this
+                  const df = document.querySelector("df-messenger");
+                  if (df && df._sendMessage) { // _sendMessage is an internal method, might change
+                      df._sendMessage(`I finished the ${level} level with a score of ${finalScore} and it took me ${timeUsed} seconds!`);
+                  } else {
+                      console.log(`Simulated message to Kiki: I finished the ${level} level with a score of ${finalScore} and it took me ${timeUsed} seconds!`);
+                  }
+                }, 500);
+              }
+            } else { setTimeout(() => { c1.innerHTML = ''; c2.innerHTML = ''; }, 800); }
+            flipped = [];
+          }
+        }; board.appendChild(div); });
+      }
+    </script>
+    <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
+    <script>
+    function updateTimer() { elapsedSeconds = Math.round((new Date() - startTime) / 1000); document.getElementById("timeDisplay").innerText = "Time: " + elapsedSeconds + "s"; }
+    </script>
+    <script>
+      function speakDescription() {
+        speechSynthesis.cancel();
+        const text = document.getElementById("description").innerText;
+        const cleanedText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "").trim();
+        const utterance = new SpeechSynthesisUtterance(cleanedText);
+        utterance.lang = "en-US";
+        utterance.rate = 0.9;
+        speechSynthesis.speak(utterance);
+      }
+    
+      document.addEventListener("click", function(e) {
+        if (!e.target.closest("#description button")) {
+          speechSynthesis.cancel();
+        }
+      });
+    </script>
+    <div id="helpIcon" onclick="toggleHelp()">?</div>
+    <div id="helpTooltip">Need help? Chat with Kiki using the chatbot in the bottom right corner!</div>
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const music = document.getElementById("bgMusic");
+      const toggleBtn = document.getElementById("musicToggle");
+    
+      toggleBtn.addEventListener("click", () => {
+        if (music.paused) {
+          music.play();
+          toggleBtn.textContent = "🔊";
+        } else {
+          music.pause();
+          toggleBtn.textContent = "🔇";
+        }
+      });
+    });
+    </script>
 </body>
+<script>
+function toggleHelp() {
+  const tooltip = document.getElementById('helpTooltip');
+  tooltip.style.display = (tooltip.style.display === 'block') ? 'none' : 'block';
+}
+</script>
 </html>
