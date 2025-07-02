@@ -7,3 +7,4 @@
   # You might not need a specific bundler if your function is simple Python.
   # Netlify will use default Python runtime.
   # node_bundler = "esbuild" # Uncomment and change if using Node.js functions
+  
