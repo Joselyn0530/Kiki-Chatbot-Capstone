@@ -40,34 +40,29 @@ def webhook():
         task = parameters.get('task')
         date_time_str = parameters.get('date-time')
 
-        # --- TRY extracting user_client_id from payload first ---
+        # --- Extract user_client_id from payload first ---
         user_client_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user_client_id')
-        
-        # --- FALLBACK: Extract from queryText (e.g., for dev testing) ---
+
+        # --- Fallback to extracting from queryText (e.g., dev testing) ---
         if not user_client_id:
             query_text = req.get('queryResult', {}).get('queryText', '')
             match = re.search(r'--CLIENT_ID:([a-f0-9-]+)', query_text)
             if match:
                 user_client_id = match.group(1)
 
-
         print(f"Extracted user_client_id: {user_client_id}")
 
-        # --- Validation ---
         if not task or not date_time_str:
-            print("Missing task or date-time.")
             return jsonify({
                 "fulfillmentText": "I couldn't understand the task or time for the reminder. Please try again?"
             })
 
         if not user_client_id:
-            print("Missing user_client_id.")
             return jsonify({
                 "fulfillmentText": "I encountered an issue identifying you to save the reminder. Please try again from the web page!"
             })
 
         try:
-            # Firestore handles tz-aware timestamps correctly
             reminder_dt = datetime.fromisoformat(date_time_str)
 
             reminder_data = {
