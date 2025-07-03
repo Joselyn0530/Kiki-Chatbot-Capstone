@@ -45,16 +45,16 @@ def webhook():
         user_client_id = None
         query_text_with_id = req.get('queryResult', {}).get('queryText')
         if query_text_with_id:
+            # Use regex to find the --CLIENT_ID: followed by the UUID
             match = re.search(r'--CLIENT_ID:([a-f0-9-]+)', query_text_with_id)
             if match:
-                user_client_id = match.group(1)
+                user_client_id = match.group(1) # Extract the captured UUID
         
         print(f"User Client ID (from queryText): {user_client_id}")
         
         # Dialogflow might still extract parameters from the original text before the ID is added.
-        # If task or date_time_str are None because the ID was added too early or parsing failed, 
-        # you might need to extract them before modifying the queryText in the frontend.
-        # For now, let's assume Dialogflow extracts them correctly before the ID interferes.
+        # This approach assumes Dialogflow's NLU can still recognize the intent and parameters
+        # even with the ID appended to the query text.
 
         if not task or not date_time_str:
             print("Missing task or date-time parameter.")
