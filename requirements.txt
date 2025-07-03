@@ -1,6 +1,6 @@
 Flask
 google-cloud-firestore
-dialogflow
+google-cloud-dialogflow
 gunicorn
-protobuf==3.20.3  
-setuptools 
+protobuf==3.20.3
+setuptools
