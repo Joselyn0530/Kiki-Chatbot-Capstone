@@ -1,11 +1,10 @@
 import os
 import json
 import tempfile
-from google.cloud import dialogflow
 from google.cloud import firestore
 from flask import Flask, request, jsonify
-from datetime import datetime, timedelta, timezone
-import re # Import regex module
+from datetime import datetime
+import re
 
 # --- START CREDENTIALS SETUP FOR RENDER ---
 firebase_key_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
@@ -22,7 +21,7 @@ if firebase_key_json:
     except Exception as e:
         print(f"Error setting up credentials from environment variable: {e}")
 else:
-    print("FIREBASE_SERVICE_ACCOUNT_KEY environment variable not found. Relying on default credentials or local setup.")
+    print("FIREBASE_SERVICE_ACCOUNT_KEY not found. Using local credentials.")
 # --- END CREDENTIALS SETUP FOR RENDER ---
 
 app = Flask(__name__)
@@ -31,61 +30,64 @@ db = firestore.Client()
 @app.route('/', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
-    print(f"Dialogflow Request: {req}")
+    print(f"Dialogflow Request: {json.dumps(req, indent=2)}")
 
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
 
     if intent_display_name == 'set.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
-        task = parameters.get('task')  
-        date_time_str = parameters.get('date-time') 
+        task = parameters.get('task')
+        date_time_str = parameters.get('date-time')
 
-        # --- CORRECTED: Extract user_client_id from queryText (FALLBACK) ---
-        user_client_id = None
-        query_text_with_id = req.get('queryResult', {}).get('queryText')
-        if query_text_with_id:
-            # Use regex to find the --CLIENT_ID: followed by the UUID
-            match = re.search(r'--CLIENT_ID:([a-f0-9-]+)', query_text_with_id)
-            if match:
-                user_client_id = match.group(1) # Extract the captured UUID
+        # --- TRY extracting user_client_id from payload first ---
+        user_client_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user_client_id')
         
-        print(f"User Client ID (from queryText): {user_client_id}")
-        
-        # Dialogflow might still extract parameters from the original text before the ID is added.
-        # This approach assumes Dialogflow's NLU can still recognize the intent and parameters
-        # even with the ID appended to the query text.
-
-        if not task or not date_time_str:
-            print("Missing task or date-time parameter.")
-            return jsonify({
-                "fulfillmentText": "I'm sorry, I couldn't understand the task or time for the reminder. Could you please specify it again?"
-            })
-        
+        # --- FALLBACK: Extract from queryText (e.g., for dev testing) ---
         if not user_client_id:
-            print("User Client ID is missing, cannot save user-specific reminder.")
+            query_text = req.get('queryResult', {}).get('queryText', '')
+            match = re.search(r'--CLIENT_ID:([a-f0-9-]+)', query_text)
+            if match:
+                user_client_id = match.group(1)
+
+        print(f"Extracted user_client_id: {user_client_id}")
+
+        # --- Validation ---
+        if not task or not date_time_str:
+            print("Missing task or date-time.")
+            return jsonify({
+                "fulfillmentText": "I couldn't understand the task or time for the reminder. Please try again?"
+            })
+
+        if not user_client_id:
+            print("Missing user_client_id.")
             return jsonify({
                 "fulfillmentText": "I encountered an issue identifying you to save the reminder. Please try again from the web page!"
             })
 
         try:
-            reminder_dt_obj = datetime.fromisoformat(date_time_str)
+            # Firestore handles tz-aware timestamps correctly
+            reminder_dt = datetime.fromisoformat(date_time_str)
 
             reminder_data = {
                 'task': task,
-                'remind_at': reminder_dt_obj,
+                'remind_at': reminder_dt,
                 'user_client_id': user_client_id,
                 'status': 'pending',
                 'created_at': firestore.SERVER_TIMESTAMP
             }
-            db.collection('reminders').add(reminder_data)
-            print(f"Reminder saved to Firestore: {reminder_data}")
 
-            user_friendly_time_str = reminder_dt_obj.strftime("%I:%M %p on %B %d, %Y")
+            db.collection('reminders').add(reminder_data)
+            print("Reminder stored:", reminder_data)
 
             response = {
                 "fulfillmentMessages": [
-                    {"text": {"text": [f"Got it! I'll remind you to '{task}' at {user_friendly_time_str}."]}
+                    {
+                        "text": {
+                            "text": [
+                                f"Got it! I'll remind you to '{task}' at {reminder_dt.strftime('%I:%M %p on %B %d, %Y')}."
+                            ]
+                        }
                     }
                 ]
             }
@@ -94,16 +96,16 @@ def webhook():
         except ValueError as e:
             print(f"Date parsing error: {e}")
             return jsonify({
-                "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
+                "fulfillmentText": "I had trouble understanding the time. Please try a format like 'tomorrow at 3 PM'."
             })
         except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            print(f"Unexpected error: {e}")
             return jsonify({
-                "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
+                "fulfillmentText": "Something went wrong while saving your reminder. Please try again later."
             })
 
     return jsonify({
-        "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting a reminder!"
+        "fulfillmentText": "I'm not sure how to respond to that yet. You can ask me to set a reminder!"
     })
 
 if __name__ == '__main__':
