@@ -1,5 +1,5 @@
 import os
-import dialogflow_v2 as dialogflow
+from google.cloud import dialogflow
 from google.cloud import firestore
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta, timezone
