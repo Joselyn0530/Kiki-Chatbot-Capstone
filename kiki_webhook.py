@@ -63,7 +63,7 @@ def webhook():
         date_time_str = parameters.get('date-time')
 
         # Get user client ID from the custom payload sent by Dialogflow Messenger's frontend
-        user_client_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
+        user_client_id = req.get('queryParams', {}).get('payload', {}).get('user_client_id')
         print(f"User Client ID: {user_client_id}")
 
         # Validate required parameters
