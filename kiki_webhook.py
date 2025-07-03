@@ -40,8 +40,8 @@ def webhook():
         task = parameters.get('task')  
         date_time_str = parameters.get('date-time') 
 
-        # --- CORRECTED: Extract user_client_id from queryResult.queryParams.payload ---
-        user_client_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
+        # --- CORRECTED: Extract user_client_id from originalDetectIntentRequest.payload ---
+        user_client_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user_client_id')
         print(f"User Client ID: {user_client_id}")
 
         if not task or not date_time_str:
