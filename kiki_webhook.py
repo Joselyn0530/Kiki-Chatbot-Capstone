@@ -5,6 +5,7 @@ from google.cloud import dialogflow
 from google.cloud import firestore
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta, timezone
+import re # Import regex module
 
 # --- START CREDENTIALS SETUP FOR RENDER ---
 firebase_key_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
@@ -40,9 +41,20 @@ def webhook():
         task = parameters.get('task')  
         date_time_str = parameters.get('date-time') 
 
-        # --- CORRECTED: Extract user_client_id from originalDetectIntentRequest.payload ---
-        user_client_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user_client_id')
-        print(f"User Client ID: {user_client_id}")
+        # --- CORRECTED: Extract user_client_id from queryText (FALLBACK) ---
+        user_client_id = None
+        query_text_with_id = req.get('queryResult', {}).get('queryText')
+        if query_text_with_id:
+            match = re.search(r'--CLIENT_ID:([a-f0-9-]+)', query_text_with_id)
+            if match:
+                user_client_id = match.group(1)
+        
+        print(f"User Client ID (from queryText): {user_client_id}")
+        
+        # Dialogflow might still extract parameters from the original text before the ID is added.
+        # If task or date_time_str are None because the ID was added too early or parsing failed, 
+        # you might need to extract them before modifying the queryText in the frontend.
+        # For now, let's assume Dialogflow extracts them correctly before the ID interferes.
 
         if not task or not date_time_str:
             print("Missing task or date-time parameter.")
