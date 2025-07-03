@@ -37,11 +37,11 @@ def webhook():
 
     if intent_display_name == 'set.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
-        task = parameters.get('task')  # Correct as per latest log
-        date_time_str = parameters.get('date-time') # Correct as per latest log
+        task = parameters.get('task')  
+        date_time_str = parameters.get('date-time') 
 
-        # --- CORRECTED: Extract user_client_id from originalDetectIntentRequest.payload ---
-        user_client_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user_client_id')
+        # --- CORRECTED: Extract user_client_id from queryResult.queryParams.payload ---
+        user_client_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
         print(f"User Client ID: {user_client_id}")
 
         if not task or not date_time_str:
@@ -50,7 +50,6 @@ def webhook():
                 "fulfillmentText": "I'm sorry, I couldn't understand the task or time for the reminder. Could you please specify it again?"
             })
         
-        # Add a check for user_client_id for robustness
         if not user_client_id:
             print("User Client ID is missing, cannot save user-specific reminder.")
             return jsonify({
