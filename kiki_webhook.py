@@ -50,6 +50,7 @@ def webhook():
             if match:
                 user_client_id = match.group(1)
 
+
         print(f"Extracted user_client_id: {user_client_id}")
 
         # --- Validation ---
