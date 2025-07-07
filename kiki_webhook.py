@@ -36,14 +36,19 @@ def webhook():
     print(f"Intent Display Name: {intent_display_name}")
 
     # Helper function to get context parameter
+    # This checks both input and output contexts for robustness
     def get_context_parameter(context_name_part, param_name):
+        # Check output contexts (active for the *next* turn)
         for context in req.get('queryResult', {}).get('outputContexts', []):
+            # The context name can be long: projects/<project_id>/agent/sessions/<session_id>/contexts/context_name
             if context_name_part in context.get('name', ''):
-                return context.get('parameters', {}).get(param_name)
-        # Also check input contexts, as sometimes parameters are present there
+                if param_name in context.get('parameters', {}):
+                    return context['parameters'][param_name]
+        # Check input contexts (active for the *current* turn)
         for context in req.get('queryResult', {}).get('inputContexts', []):
             if context_name_part in context.get('name', ''):
-                return context.get('parameters', {}).get(param_name)
+                if param_name in context.get('parameters', {}):
+                    return context['parameters'][param_name]
         return None
 
     if intent_display_name == 'set.reminder':
@@ -90,7 +95,7 @@ def webhook():
                 "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
             })
 
-    # NEW: Handle delete.reminder intent (initial request)
+    # Handle delete.reminder intent (initial request to find and confirm)
     elif intent_display_name == 'delete.reminder': 
         parameters = req.get('queryResult', {}).get('parameters', {})
         task_to_delete = parameters.get('task')
@@ -103,15 +108,19 @@ def webhook():
 
         try:
             target_dt_obj = datetime.fromisoformat(date_time_to_delete_str)
+            
+            # Create a small time window (e.g., +/- 1 minute) around the target time
+            # to account for potential slight discrepancies in parsing or user input.
             time_window_start = target_dt_obj - timedelta(minutes=1)
             time_window_end = target_dt_obj + timedelta(minutes=1)
 
+            # Query Firestore for pending reminders matching the task within the time window
             query = db.collection('reminders') \
                       .where('task', '==', task_to_delete) \
                       .where('status', '==', 'pending') \
                       .where('remind_at', '>=', time_window_start) \
                       .where('remind_at', '<=', time_window_end) \
-                      .limit(1) 
+                      .limit(1) # Limit to 1 for simplicity, assuming a unique enough match
 
             docs = query.get()
 
@@ -124,7 +133,7 @@ def webhook():
                 found_remind_at_dt = reminder_data['remind_at'].toDate()
                 user_friendly_time_str = found_remind_at_dt.strftime("%I:%M %p on %B %d, %Y")
                 
-                # Get the current session to set context
+                # Get the current session to set context for the next turn
                 session_id = req['session']
                 
                 # Response with confirmation question and context parameters
@@ -162,7 +171,7 @@ def webhook():
                 "fulfillmentText": "I'm sorry, something went wrong while trying to find your reminder for deletion. Please try again later."
             })
 
-    # NEW: Handle delete.reminder - yes intent (confirmation step)
+    # Handle delete.reminder - yes intent (confirmation step)
     elif intent_display_name == 'delete.reminder - yes': # This assumes your Dialogflow follow-up intent is named exactly this
         # Retrieve reminder details from the active context
         reminder_id_to_delete = get_context_parameter('awaiting_deletion_confirmation', 'reminder_id_to_delete')
