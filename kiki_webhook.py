@@ -129,9 +129,8 @@ def webhook():
                 reminder_data = reminder_doc.to_dict()
                 reminder_id = reminder_doc.id
                 
-                # Format reminder time for user-friendly display
-                found_remind_at_dt = reminder_data['remind_at'].toDate()
-                user_friendly_time_str = found_remind_at_dt.strftime("%I:%M %p on %B %d, %Y")
+                # CORRECTED LINE: Directly format the Timestamp object
+                user_friendly_time_str = reminder_data['remind_at'].strftime("%I:%M %p on %B %d, %Y")
                 
                 # Get the current session to set context for the next turn
                 session_id = req['session']
@@ -166,6 +165,7 @@ def webhook():
                 "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
             })
         except Exception as e:
+            # This general exception catcher will now be less likely to be hit by the .toDate() error
             print(f"An unexpected error occurred during reminder lookup for deletion: {e}")
             return jsonify({
                 "fulfillmentText": "I'm sorry, something went wrong while trying to find your reminder for deletion. Please try again later."
