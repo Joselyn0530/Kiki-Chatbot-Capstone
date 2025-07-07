@@ -35,13 +35,21 @@ def webhook():
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
 
+    # Helper function to get context parameter
+    def get_context_parameter(context_name_part, param_name):
+        for context in req.get('queryResult', {}).get('outputContexts', []):
+            if context_name_part in context.get('name', ''):
+                return context.get('parameters', {}).get(param_name)
+        # Also check input contexts, as sometimes parameters are present there
+        for context in req.get('queryResult', {}).get('inputContexts', []):
+            if context_name_part in context.get('name', ''):
+                return context.get('parameters', {}).get(param_name)
+        return None
+
     if intent_display_name == 'set.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
         task = parameters.get('task')  
         date_time_str = parameters.get('date-time') 
-
-        # user_client_id extraction and check REMOVED
-        # Reminders will no longer be user-specific in Firestore
 
         if not task or not date_time_str:
             print("Missing task or date-time parameter.")
@@ -55,7 +63,6 @@ def webhook():
             reminder_data = {
                 'task': task,
                 'remind_at': reminder_dt_obj,
-                # 'user_client_id': user_client_id, # user_client_id field REMOVED
                 'status': 'pending',
                 'created_at': firestore.SERVER_TIMESTAMP
             }
@@ -81,6 +88,103 @@ def webhook():
             print(f"An unexpected error occurred: {e}")
             return jsonify({
                 "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
+            })
+
+    # NEW: Handle delete.reminder intent (initial request)
+    elif intent_display_name == 'delete.reminder': 
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        task_to_delete = parameters.get('task')
+        date_time_to_delete_str = parameters.get('date-time')
+
+        if not task_to_delete or not date_time_to_delete_str:
+            return jsonify({
+                "fulfillmentText": "To delete a reminder, please tell me the task and the approximate time, e.g., 'delete my bath reminder at 8 PM'."
+            })
+
+        try:
+            target_dt_obj = datetime.fromisoformat(date_time_to_delete_str)
+            time_window_start = target_dt_obj - timedelta(minutes=1)
+            time_window_end = target_dt_obj + timedelta(minutes=1)
+
+            query = db.collection('reminders') \
+                      .where('task', '==', task_to_delete) \
+                      .where('status', '==', 'pending') \
+                      .where('remind_at', '>=', time_window_start) \
+                      .where('remind_at', '<=', time_window_end) \
+                      .limit(1) 
+
+            docs = query.get()
+
+            if docs:
+                reminder_doc = next(iter(docs)) # Get the first (and only) doc
+                reminder_data = reminder_doc.to_dict()
+                reminder_id = reminder_doc.id
+                
+                # Format reminder time for user-friendly display
+                found_remind_at_dt = reminder_data['remind_at'].toDate()
+                user_friendly_time_str = found_remind_at_dt.strftime("%I:%M %p on %B %d, %Y")
+                
+                # Get the current session to set context
+                session_id = req['session']
+                
+                # Response with confirmation question and context parameters
+                response = {
+                    "fulfillmentText": f"I found your reminder to '{reminder_data['task']}' at {user_friendly_time_str}. Do you want me to delete it?",
+                    "outputContexts": [
+                        {
+                            "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
+                            "lifespanCount": 2, # Context active for 2 turns
+                            "parameters": {
+                                "reminder_id_to_delete": reminder_id,
+                                "reminder_task_found": reminder_data['task'],
+                                "reminder_time_found": user_friendly_time_str
+                            }
+                        }
+                    ]
+                }
+                print(f"Found reminder {reminder_id} for deletion. Awaiting confirmation.")
+                return jsonify(response)
+            else:
+                print(f"No pending reminder found for task '{task_to_delete}' around {target_dt_obj}.")
+                user_friendly_time_str = target_dt_obj.strftime("%I:%M %p on %B %d, %Y")
+                return jsonify({
+                    "fulfillmentText": f"I couldn't find a pending reminder to '{task_to_delete}' around {user_friendly_time_str}. Please make sure the task and time are correct and it's still pending."
+                })
+
+        except ValueError as e:
+            print(f"Date parsing error in delete: {e}")
+            return jsonify({
+                "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
+            })
+        except Exception as e:
+            print(f"An unexpected error occurred during reminder lookup for deletion: {e}")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, something went wrong while trying to find your reminder for deletion. Please try again later."
+            })
+
+    # NEW: Handle delete.reminder - yes intent (confirmation step)
+    elif intent_display_name == 'delete.reminder - yes': # This assumes your Dialogflow follow-up intent is named exactly this
+        # Retrieve reminder details from the active context
+        reminder_id_to_delete = get_context_parameter('awaiting_deletion_confirmation', 'reminder_id_to_delete')
+        reminder_task_found = get_context_parameter('awaiting_deletion_confirmation', 'reminder_task_found')
+        reminder_time_found = get_context_parameter('awaiting_deletion_confirmation', 'reminder_time_found')
+
+        if reminder_id_to_delete:
+            try:
+                db.collection('reminders').document(reminder_id_to_delete).delete()
+                print(f"Reminder (ID: {reminder_id_to_delete}) confirmed and deleted from Firestore.")
+                return jsonify({
+                    "fulfillmentText": f"Okay, I've successfully deleted your reminder to '{reminder_task_found}' at {reminder_time_found}."
+                })
+            except Exception as e:
+                print(f"Error deleting reminder from context: {e}")
+                return jsonify({
+                    "fulfillmentText": "I'm sorry, I encountered an error while trying to delete the reminder. Please try again."
+                })
+        else:
+            print("No reminder ID found in context for deletion confirmation.")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I lost track of which reminder you wanted to delete. Please tell me again."
             })
 
     return jsonify({
