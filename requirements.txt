@@ -3,4 +3,5 @@ google-cloud-firestore
 google-cloud-dialogflow
 gunicorn
 protobuf==3.20.3
+pytz
 setuptools
