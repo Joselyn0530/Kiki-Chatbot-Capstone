@@ -5,7 +5,7 @@ from google.cloud import dialogflow
 from google.cloud import firestore
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta, timezone
-import pytz # <--- NEW IMPORT
+import pytz
 
 # --- START CREDENTIALS SETUP FOR RENDER ---
 firebase_key_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
@@ -29,15 +29,18 @@ app = Flask(__name__)
 db = firestore.Client()
 
 # Define the local timezone for display (Malaysia, GMT+8)
-KUALA_LUMPUR_TZ = pytz.timezone('Asia/Kuala_Lumpur') # <--- NEW LINE
+KUALA_LUMPUR_TZ = pytz.timezone('Asia/Kuala_Lumpur')
 
-# Helper function to get context parameter
-def get_context_parameter(context_name_part, param_name):
-    for context in req.get('queryResult', {}).get('outputContexts', []):
+# Helper function to get context parameter <--- MODIFIED DEFINITION
+def get_context_parameter(req_payload, context_name_part, param_name): # <--- req_payload added as argument
+    # Check output contexts (active for the *next* turn)
+    for context in req_payload.get('queryResult', {}).get('outputContexts', []): # <--- Use req_payload
+        # The context name can be long: projects/<project_id>/agent/sessions/<session_id>/contexts/context_name
         if context_name_part in context.get('name', ''):
             if param_name in context.get('parameters', {}):
                 return context['parameters'][param_name]
-    for context in req.get('queryResult', {}).get('inputContexts', []):
+    # Check input contexts (active for the *current* turn)
+    for context in req_payload.get('queryResult', {}).get('inputContexts', []): # <--- Use req_payload
         if context_name_part in context.get('name', ''):
             if param_name in context.get('parameters', {}):
                 return context['parameters'][param_name]
@@ -61,7 +64,7 @@ def webhook():
             return jsonify({
                 "fulfillmentText": "I'm sorry, I couldn't understand the task or time for the reminder. Could you please specify it again?"
             })
-
+        
         try:
             reminder_dt_obj = datetime.fromisoformat(date_time_str)
 
@@ -74,7 +77,6 @@ def webhook():
             db.collection('reminders').add(reminder_data)
             print(f"Reminder saved to Firestore: {reminder_data}")
 
-            # Convert to local timezone for display <--- MODIFIED LINE
             user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
 
             response = {
@@ -109,7 +111,7 @@ def webhook():
 
         try:
             target_dt_obj = datetime.fromisoformat(date_time_to_delete_str)
-
+            
             # Create a small time window (e.g., +/- 1 minute) around the target time
             time_window_start = target_dt_obj - timedelta(minutes=1)
             time_window_end = target_dt_obj + timedelta(minutes=1)
@@ -127,12 +129,11 @@ def webhook():
                 reminder_doc = next(iter(docs)) 
                 reminder_data = reminder_doc.to_dict()
                 reminder_id = reminder_doc.id
-
-                # Convert to local timezone for display <--- MODIFIED LINE
+                
                 user_friendly_time_str = reminder_data['remind_at'].astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-
+                
                 session_id = req['session']
-
+                
                 response = {
                     "fulfillmentText": f"I found your reminder to '{reminder_data['task']}' at {user_friendly_time_str}. Do you want me to delete it?",
                     "outputContexts": [
@@ -151,8 +152,7 @@ def webhook():
                 return jsonify(response)
             else:
                 print(f"No pending reminder found for task '{task_to_delete}' around {target_dt_obj}.")
-                # It's good to display the user's intended time if no reminder is found too
-                user_friendly_time_str = target_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y") # <--- ADDED astimezone for consistency
+                user_friendly_time_str = target_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                 return jsonify({
                     "fulfillmentText": f"I couldn't find a pending reminder to '{task_to_delete}' around {user_friendly_time_str}. Please make sure the task and time are correct and it's still pending."
                 })
@@ -170,9 +170,10 @@ def webhook():
 
     # Handle delete.reminder - yes intent (confirmation step)
     elif intent_display_name == 'delete.reminder - yes': 
-        reminder_id_to_delete = get_context_parameter('awaiting_deletion_confirmation', 'reminder_id_to_delete')
-        reminder_task_found = get_context_parameter('awaiting_deletion_confirmation', 'reminder_task_found')
-        reminder_time_found = get_context_parameter('awaiting_deletion_confirmation', 'reminder_time_found')
+        # Pass 'req' as the first argument <--- MODIFIED CALLS
+        reminder_id_to_delete = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_id_to_delete')
+        reminder_task_found = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_task_found')
+        reminder_time_found = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found')
 
         if reminder_id_to_delete:
             try:
@@ -186,11 +187,11 @@ def webhook():
                 return jsonify({
                     "fulfillmentText": "I'm sorry, I encountered an error while trying to delete the reminder. Please try again."
                 })
-        else:
-            print("No reminder ID found in context for deletion confirmation.")
-            return jsonify({
-                "fulfillmentText": "I'm sorry, I lost track of which reminder you wanted to delete. Please tell me again."
-            })
+            else:
+                print("No reminder ID found in context for deletion confirmation.")
+                return jsonify({
+                    "fulfillmentText": "I'm sorry, I lost track of which reminder you wanted to delete. Please tell me again."
+                })
 
     return jsonify({
         "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting a reminder!"
