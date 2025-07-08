@@ -31,16 +31,13 @@ db = firestore.Client()
 # Define the local timezone for display (Malaysia, GMT+8)
 KUALA_LUMPUR_TZ = pytz.timezone('Asia/Kuala_Lumpur')
 
-# Helper function to get context parameter <--- MODIFIED DEFINITION
-def get_context_parameter(req_payload, context_name_part, param_name): # <--- req_payload added as argument
-    # Check output contexts (active for the *next* turn)
-    for context in req_payload.get('queryResult', {}).get('outputContexts', []): # <--- Use req_payload
-        # The context name can be long: projects/<project_id>/agent/sessions/<session_id>/contexts/context_name
+# Helper function to get context parameter
+def get_context_parameter(req_payload, context_name_part, param_name):
+    for context in req_payload.get('queryResult', {}).get('outputContexts', []):
         if context_name_part in context.get('name', ''):
             if param_name in context.get('parameters', {}):
                 return context['parameters'][param_name]
-    # Check input contexts (active for the *current* turn)
-    for context in req_payload.get('queryResult', {}).get('inputContexts', []): # <--- Use req_payload
+    for context in req_payload.get('queryResult', {}).get('inputContexts', []):
         if context_name_part in context.get('name', ''):
             if param_name in context.get('parameters', {}):
                 return context['parameters'][param_name]
@@ -170,7 +167,6 @@ def webhook():
 
     # Handle delete.reminder - yes intent (confirmation step)
     elif intent_display_name == 'delete.reminder - yes': 
-        # Pass 'req' as the first argument <--- MODIFIED CALLS
         reminder_id_to_delete = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_id_to_delete')
         reminder_task_found = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_task_found')
         reminder_time_found = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found')
@@ -187,19 +183,11 @@ def webhook():
                 return jsonify({
                     "fulfillmentText": "I'm sorry, I encountered an error while trying to delete the reminder. Please try again."
                 })
-            else:
-                print("No reminder ID found in context for deletion confirmation.")
-                return jsonify({
-                    "fulfillmentText": "I'm sorry, I lost track of which reminder you wanted to delete. Please tell me again."
-                })
-
-    return jsonify({
-        "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting a reminder!"
-    })
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+        else:
+            print("No reminder ID found in context for deletion confirmation.")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I lost track of which reminder you wanted to delete. Please tell me again."
+            })
 
     # Handle delete.reminder - no intent (negation of deletion confirmation)
     elif intent_display_name == 'delete.reminder - no': # Assuming this is your Dialogflow intent name
@@ -215,6 +203,139 @@ if __name__ == '__main__':
             ]
         }
         print(f"User declined deletion. Context 'awaiting_deletion_confirmation' cleared.")
+        return jsonify(response)
+
+
+    # Handle update.reminder intent (initial request to find and ask for confirmation) <--- NEW BLOCK
+    elif intent_display_name == 'update.reminder':
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        task_to_update = parameters.get('task')
+        old_date_time_str = parameters.get('old-date-time')
+        new_date_time_str = parameters.get('new-date-time')
+
+        if not task_to_update or not old_date_time_str or not new_date_time_str:
+            return jsonify({
+                "fulfillmentText": "To change a reminder, please tell me the task, its current time, and the new time. E.g., 'change my sleep reminder from 2pm to 4pm'."
+            })
+
+        try:
+            old_dt_obj = datetime.fromisoformat(old_date_time_str)
+            new_dt_obj = datetime.fromisoformat(new_date_time_str) # Keep new_dt_obj for later update
+
+            # Create a small time window around the old time to find the reminder
+            time_window_start = old_dt_obj - timedelta(minutes=1)
+            time_window_end = old_dt_obj + timedelta(minutes=1)
+
+            query = db.collection('reminders') \
+                      .where('task', '==', task_to_update) \
+                      .where('status', '==', 'pending') \
+                      .where('remind_at', '>=', time_window_start) \
+                      .where('remind_at', '<=', time_window_end) \
+                      .limit(1)
+
+            docs = query.get()
+
+            if docs:
+                reminder_doc = next(iter(docs))
+                reminder_id = reminder_doc.id
+                reminder_data = reminder_doc.to_dict()
+
+                # Format old and new times for user-friendly display in local timezone
+                user_friendly_old_time_str = reminder_data['remind_at'].astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+
+                session_id = req['session']
+                response = {
+                    "fulfillmentText": f"I found your reminder to '{task_to_update}' at {user_friendly_old_time_str}. Do you want to change it to {user_friendly_new_time_str}?",
+                    "outputContexts": [
+                        {
+                            "name": f"{session_id}/contexts/awaiting_update_confirmation",
+                            "lifespanCount": 2, # Context active for 2 turns
+                            "parameters": {
+                                "reminder_id_to_update": reminder_id,
+                                "reminder_task_found": task_to_update,
+                                "reminder_old_time_found": user_friendly_old_time_str, # Storing formatted time for confirmation
+                                "reminder_new_time_desired_str": new_date_time_str # Store ISO string for precise update later
+                            }
+                        }
+                    ]
+                }
+                print(f"Found reminder {reminder_id} for update. Awaiting confirmation.")
+                return jsonify(response)
+            else:
+                user_friendly_old_time_str = old_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                return jsonify({
+                    "fulfillmentText": f"I couldn't find a pending reminder to '{task_to_update}' at {user_friendly_old_time_str}. Please make sure the task and time are correct."
+                })
+
+        except ValueError as e:
+            print(f"Date parsing error in update: {e}")
+            return jsonify({
+                "fulfillmentText": "I had trouble understanding the times. Please use a clear format like 'from 2 PM to 4 PM'."
+            })
+        except Exception as e:
+            print(f"An unexpected error occurred during reminder lookup for update: {e}")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, something went wrong while trying to find your reminder for update. Please try again later."
+            })
+
+    # Handle update.reminder - yes intent (confirmation step) <--- NEW BLOCK
+    elif intent_display_name == 'update.reminder - yes':
+        reminder_id_to_update = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_id_to_update')
+        reminder_task_found = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_task_found')
+        reminder_old_time_found = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_old_time_found')
+        reminder_new_time_desired_str = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_new_time_desired_str')
+
+        if reminder_id_to_update and reminder_new_time_desired_str:
+            try:
+                # Convert the stored new time string back to a datetime object for the update
+                new_dt_obj_for_update = datetime.fromisoformat(reminder_new_time_desired_str)
+
+                db.collection('reminders').document(reminder_id_to_update).update({
+                    'remind_at': new_dt_obj_for_update
+                })
+                print(f"Reminder (ID: {reminder_id_to_update}) confirmed and updated to {new_dt_obj_for_update}.")
+
+                session_id = req['session']
+                response = {
+                    "fulfillmentText": f"Okay, I've successfully changed your reminder to '{reminder_task_found}' to {reminder_old_time_found}.", # Use old time for context, new time implied
+                    "outputContexts": [
+                        {
+                            "name": f"{session_id}/contexts/awaiting_update_confirmation",
+                            "lifespanCount": 0 # Clear the context
+                        }
+                    ]
+                }
+                return jsonify(response)
+            except ValueError as e:
+                print(f"Error parsing new time from context: {e}")
+                return jsonify({
+                    "fulfillmentText": "I had trouble confirming the new time for the reminder. Please try to change it again."
+                })
+            except Exception as e:
+                print(f"Error updating reminder: {e}")
+                return jsonify({
+                    "fulfillmentText": "I'm sorry, I encountered an error while trying to update the reminder. Please try again."
+                })
+        else:
+            print("Missing reminder ID or new time in context for update confirmation.")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I lost track of which reminder you wanted to update. Please tell me again."
+            })
+
+    # Handle update.reminder - no intent (negation of update confirmation) <--- NEW BLOCK
+    elif intent_display_name == 'update.reminder - no':
+        session_id = req['session']
+        response = {
+            "fulfillmentText": "Okay, I won't change that reminder. What else can I help you with?",
+            "outputContexts": [
+                {
+                    "name": f"{session_id}/contexts/awaiting_update_confirmation",
+                    "lifespanCount": 0 # Clear the context
+                }
+            ]
+        }
+        print(f"User declined update. Context 'awaiting_update_confirmation' cleared.")
         return jsonify(response)
 
     return jsonify({
