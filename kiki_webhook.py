@@ -206,7 +206,7 @@ def webhook():
         return jsonify(response)
 
 
-    # Handle update.reminder intent (initial request to find and ask for confirmation) <--- NEW BLOCK
+    # Handle update.reminder intent (initial request to find and ask for confirmation)
     elif intent_display_name == 'update.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
         task_to_update = parameters.get('task')
@@ -255,7 +255,8 @@ def webhook():
                                 "reminder_id_to_update": reminder_id,
                                 "reminder_task_found": task_to_update,
                                 "reminder_old_time_found": user_friendly_old_time_str, # Storing formatted time for confirmation
-                                "reminder_new_time_desired_str": new_date_time_str # Store ISO string for precise update later
+                                "reminder_new_time_desired_iso_str": new_date_time_str, # Store ISO string for precise update later
+                                "reminder_new_time_desired_formatted": user_friendly_new_time_str # NEW PARAMETER
                             }
                         }
                     ]
@@ -279,17 +280,16 @@ def webhook():
                 "fulfillmentText": "I'm sorry, something went wrong while trying to find your reminder for update. Please try again later."
             })
 
-    # Handle update.reminder - yes intent (confirmation step) <--- NEW BLOCK
+    # Handle update.reminder - yes intent (confirmation step)
     elif intent_display_name == 'update.reminder - yes':
         reminder_id_to_update = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_id_to_update')
         reminder_task_found = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_task_found')
-        reminder_old_time_found = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_old_time_found')
-        reminder_new_time_desired_str = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_new_time_desired_str')
+        reminder_new_time_desired_iso_str = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_new_time_desired_iso_str')
+        reminder_new_time_desired_formatted = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_new_time_desired_formatted')
 
-        if reminder_id_to_update and reminder_new_time_desired_str:
+        if reminder_id_to_update and reminder_new_time_desired_iso_str:
             try:
-                # Convert the stored new time string back to a datetime object for the update
-                new_dt_obj_for_update = datetime.fromisoformat(reminder_new_time_desired_str)
+                new_dt_obj_for_update = datetime.fromisoformat(reminder_new_time_desired_iso_str)
 
                 db.collection('reminders').document(reminder_id_to_update).update({
                     'remind_at': new_dt_obj_for_update
@@ -298,7 +298,7 @@ def webhook():
 
                 session_id = req['session']
                 response = {
-                    "fulfillmentText": f"Okay, I've successfully changed your reminder to '{reminder_task_found}' to {reminder_old_time_found}.", # Use old time for context, new time implied
+                    "fulfillmentText": f"Okay, I've successfully changed your reminder to '{reminder_task_found}' to {reminder_new_time_desired_formatted}.",
                     "outputContexts": [
                         {
                             "name": f"{session_id}/contexts/awaiting_update_confirmation",
@@ -323,7 +323,7 @@ def webhook():
                 "fulfillmentText": "I'm sorry, I lost track of which reminder you wanted to update. Please tell me again."
             })
 
-    # Handle update.reminder - no intent (negation of update confirmation) <--- NEW BLOCK
+    # Handle update.reminder - no intent (negation of update confirmation)
     elif intent_display_name == 'update.reminder - no':
         session_id = req['session']
         response = {
