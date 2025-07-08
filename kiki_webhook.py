@@ -200,3 +200,27 @@ def webhook():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
+    # Handle delete.reminder - no intent (negation of deletion confirmation)
+    elif intent_display_name == 'delete.reminder - no': # Assuming this is your Dialogflow intent name
+        session_id = req['session']
+        # Clear the awaiting_deletion_confirmation context
+        response = {
+            "fulfillmentText": "Okay, I won't delete that reminder. What else can I help you with?",
+            "outputContexts": [
+                {
+                    "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
+                    "lifespanCount": 0 # This clears the context
+                }
+            ]
+        }
+        print(f"User declined deletion. Context 'awaiting_deletion_confirmation' cleared.")
+        return jsonify(response)
+
+    return jsonify({
+        "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting a reminder!"
+    })
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host='0.0.0.0', port=port, debug=True)
