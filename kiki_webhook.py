@@ -6,6 +6,7 @@ from google.cloud import firestore
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta, timezone
 import pytz
+import openai  # Add this import at the top with other imports
 
 # --- START CREDENTIALS SETUP FOR RENDER ---
 firebase_key_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
@@ -606,6 +607,33 @@ def webhook():
         else:
             return jsonify({
                 "fulfillmentText": "I couldn't identify which reminder you meant. Please choose a number from the list or try specifying the time more precisely."
+            })
+    
+    # Add OpenAI GPT-3.5-Turbo integration for FeelingHappyIntent
+    elif intent_display_name == 'FeelingHappyIntent':
+        user_message = req.get('queryResult', {}).get('queryText', '')
+        openai_api_key = os.environ.get('OPENAI_API_KEY')
+        if not openai_api_key:
+            return jsonify({
+                "fulfillmentText": "OpenAI API key is not set on the server."
+            })
+        try:
+            openai.api_key = openai_api_key
+            completion = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a warm, friendly, and supportive companion chatbot for elderly users. Always provide emotional support, empathy, and encouragement. Respond in a gentle, caring, and positive manner, suitable for older adults who may be feeling lonely or in need of a friend."},
+                    {"role": "user", "content": user_message}
+                ]
+            )
+            ai_reply = completion.choices[0].message["content"]
+            return jsonify({
+                "fulfillmentText": ai_reply
+            })
+        except Exception as e:
+            print(f"OpenAI API error: {e}")
+            return jsonify({
+                "fulfillmentText": "Sorry, I couldn't process your request right now."
             })
     
     # Fallback if no specific intent is matched
