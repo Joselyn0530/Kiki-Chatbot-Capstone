@@ -609,7 +609,7 @@ def webhook():
                 "fulfillmentText": "I couldn't identify which reminder you meant. Please choose a number from the list or try specifying the time more precisely."
             })
     
-    # Add OpenAI GPT-3.5-Turbo integration for Feelinghappyintent
+    # Add OpenAI GPT-3.5-Turbo integration for FeelingHappyIntent
     elif intent_display_name == 'Feelinghappyintent':
         user_message = req.get('queryResult', {}).get('queryText', '')
         openai_api_key = os.environ.get('OPENAI_API_KEY')
@@ -618,15 +618,15 @@ def webhook():
                 "fulfillmentText": "OpenAI API key is not set on the server."
             })
         try:
-            openai.api_key = openai_api_key
-            completion = openai.ChatCompletion.create(
+            client = openai.OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a warm, friendly, and supportive companion chatbot for elderly users. Always provide emotional support, empathy, and encouragement. Respond in a gentle, caring, and positive manner, suitable for older adults who may be feeling lonely or in need of a friend."},
                     {"role": "user", "content": user_message}
                 ]
             )
-            ai_reply = completion.choices[0].message["content"]
+            ai_reply = response.choices[0].message.content
             return jsonify({
                 "fulfillmentText": ai_reply
             })
