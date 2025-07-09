@@ -45,26 +45,45 @@ def get_context_parameter(req_payload, context_name_part, param_name):
 # Helper function to extract user_client_id from Dialogflow request
 def get_user_client_id(req):
     """Extract user_client_id from Dialogflow request"""
+    if not req:
+        print("Warning: Request object is None, using default user ID")
+        return 'unknown_user'
+    
     # Try to get from session ID (most reliable method)
     session_id = req.get('session', '')
+    print(f"Session ID: {session_id}")
+    
     if session_id:
         # Extract user ID from session path: projects/PROJECT_ID/agent/sessions/USER_ID
         parts = session_id.split('/')
+        print(f"Session parts: {parts}")
         if len(parts) >= 6:
-            return parts[-1]  # Last part is the user ID
+            user_id = parts[-1]  # Last part is the user ID
+            print(f"Extracted user ID from session: {user_id}")
+            return user_id
     
     # Fallback: try to get from user ID field
     user_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user', {}).get('userId')
     if user_id:
+        print(f"Found user ID in payload: {user_id}")
         return user_id
     
     # If no user ID found, use session ID as fallback
-    return session_id or 'unknown_user'
+    fallback_id = session_id or 'unknown_user'
+    print(f"Using fallback user ID: {fallback_id}")
+    return fallback_id
 
 @app.route('/', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
     print(f"Dialogflow Request: {req}")
+
+    # Add null safety for request
+    if not req:
+        print("Error: Request is None")
+        return jsonify({
+            "fulfillmentText": "I'm sorry, there was an error processing your request. Please try again."
+        })
 
     # Extract user_client_id for this request
     user_client_id = get_user_client_id(req)
@@ -94,8 +113,10 @@ def webhook():
                 'status': 'pending',
                 'created_at': firestore.SERVER_TIMESTAMP
             }
-            db.collection('reminders').add(reminder_data)
-            print(f"Reminder saved to Firestore: {reminder_data}")
+            print(f"About to save reminder with user_client_id: {user_client_id}")
+            doc_ref = db.collection('reminders').add(reminder_data)
+            print(f"Reminder saved to Firestore with ID: {doc_ref[1].id}")
+            print(f"Reminder data: {reminder_data}")
 
             user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
 
@@ -130,6 +151,15 @@ def webhook():
             })
 
         try:
+            print(f"Searching for reminders with user_client_id: {user_client_id}, task: {task_to_delete}")
+            
+            # DEBUG: Let's see ALL reminders in the database to understand the issue
+            all_reminders = db.collection('reminders').limit(10).get()
+            print(f"DEBUG: Total reminders in database: {len(all_reminders)}")
+            for doc in all_reminders:
+                data = doc.to_dict()
+                print(f"DEBUG: Reminder {doc.id}: user_client_id={data.get('user_client_id', 'MISSING')}, task={data.get('task')}, status={data.get('status')}")
+            
             query = db.collection('reminders') \
                       .where('user_client_id', '==', user_client_id) \
                       .where('task', '==', task_to_delete) \
@@ -182,9 +212,11 @@ def webhook():
             else:
                 # No specific time provided, list multiple if found
                 docs = query.limit(5).get() # Limit to a reasonable number of results
+                print(f"Found {len(docs)} documents for user {user_client_id}")
 
                 for doc in docs:
                     data = doc.to_dict()
+                    print(f"Document {doc.id}: user_client_id={data.get('user_client_id')}, task={data.get('task')}")
                     found_reminders.append({
                         'id': doc.id,
                         'task': data['task'],
