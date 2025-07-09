@@ -67,14 +67,19 @@ def webhook():
             task = task.strip().lower()
         GENERIC_TASKS = {"set a reminder", "reminder", "remind me", "remind", "add reminder"}
         if task and task in GENERIC_TASKS:
-            # Do NOT use any previous time from context, just ask for the real task
+            # Clear both task and time contexts to avoid using previous values
             return jsonify({
                 "fulfillmentText": "Sure! ☺️ What should I remind you about?",
                 "outputContexts": [
                     {
                         "name": f"{req['session']}/contexts/await_task",
                         "lifespanCount": 2,
-                        "parameters": {}  # Clear any previous parameters
+                        "parameters": {}
+                    },
+                    {
+                        "name": f"{req['session']}/contexts/await_time",
+                        "lifespanCount": 0,
+                        "parameters": {}
                     }
                 ]
             })
