@@ -42,10 +42,33 @@ def get_context_parameter(req_payload, context_name_part, param_name):
                 return context['parameters'][param_name]
     return None
 
+# Helper function to extract user_client_id from Dialogflow request
+def get_user_client_id(req):
+    """Extract user_client_id from Dialogflow request"""
+    # Try to get from session ID (most reliable method)
+    session_id = req.get('session', '')
+    if session_id:
+        # Extract user ID from session path: projects/PROJECT_ID/agent/sessions/USER_ID
+        parts = session_id.split('/')
+        if len(parts) >= 6:
+            return parts[-1]  # Last part is the user ID
+    
+    # Fallback: try to get from user ID field
+    user_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user', {}).get('userId')
+    if user_id:
+        return user_id
+    
+    # If no user ID found, use session ID as fallback
+    return session_id or 'unknown_user'
+
 @app.route('/', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
     print(f"Dialogflow Request: {req}")
+
+    # Extract user_client_id for this request
+    user_client_id = get_user_client_id(req)
+    print(f"User Client ID: {user_client_id}")
 
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
@@ -65,6 +88,7 @@ def webhook():
             reminder_dt_obj = datetime.fromisoformat(date_time_str)
 
             reminder_data = {
+                'user_client_id': user_client_id,  # Add user isolation
                 'task': task,
                 'remind_at': reminder_dt_obj,
                 'status': 'pending',
@@ -107,6 +131,7 @@ def webhook():
 
         try:
             query = db.collection('reminders') \
+                      .where('user_client_id', '==', user_client_id) \
                       .where('task', '==', task_to_delete) \
                       .where('status', '==', 'pending') \
                       .order_by('remind_at') # Always order by time
@@ -291,6 +316,7 @@ def webhook():
         try:
             # Base query for pending tasks, ordered by time
             query = db.collection('reminders') \
+                      .where('user_client_id', '==', user_client_id) \
                       .where('task', '==', task_to_update) \
                       .where('status', '==', 'pending') \
                       .order_by('remind_at') 
