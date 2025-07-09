@@ -42,6 +42,26 @@ def get_context_parameter(req_payload, context_name_part, param_name):
                 return context['parameters'][param_name]
     return None
 
+# Helper function to migrate old reminders without user_client_id
+def migrate_old_reminders():
+    """Migrate old reminders that don't have user_client_id field"""
+    try:
+        # Get all reminders without user_client_id
+        old_reminders = db.collection('reminders').where('user_client_id', '==', None).get()
+        print(f"Found {len(old_reminders)} old reminders without user_client_id")
+        
+        for doc in old_reminders:
+            # Mark these as completed so they don't interfere with user isolation
+            doc.reference.update({
+                'status': 'completed',
+                'user_client_id': 'migrated_old_reminder',
+                'migrated_at': firestore.SERVER_TIMESTAMP
+            })
+            print(f"Migrated old reminder {doc.id}")
+            
+    except Exception as e:
+        print(f"Error migrating old reminders: {e}")
+
 # Helper function to extract user_client_id from Dialogflow request
 def get_user_client_id(req):
     """Extract user_client_id from Dialogflow request - prioritize frontend user ID"""
@@ -53,8 +73,10 @@ def get_user_client_id(req):
     
     # Method 1: Try to get from frontend payload (most reliable for persistence)
     query_params = req.get('queryResult', {}).get('queryParams', {})
+    print(f"queryParams: {query_params}")
     if query_params and 'payload' in query_params:
         payload = query_params['payload']
+        print(f"payload: {payload}")
         if 'user_client_id' in payload:
             user_client_id = payload['user_client_id']
             print(f"✅ Found frontend user_client_id: {user_client_id}")
@@ -62,14 +84,42 @@ def get_user_client_id(req):
     
     # Method 2: Try to get from originalDetectIntentRequest payload
     original_request = req.get('originalDetectIntentRequest', {})
+    print(f"originalDetectIntentRequest: {original_request}")
     if original_request and 'payload' in original_request:
         original_payload = original_request['payload']
+        print(f"original_payload: {original_payload}")
         if 'user_client_id' in original_payload:
             user_client_id = original_payload['user_client_id']
             print(f"✅ Found user_client_id in originalDetectIntentRequest: {user_client_id}")
             return user_client_id
     
-    # Method 3: Fallback to session ID (less reliable for persistence)
+    # Method 3: Try to get from queryResult.parameters (Dialogflow might store it here)
+    parameters = req.get('queryResult', {}).get('parameters', {})
+    print(f"parameters: {parameters}")
+    if 'user_client_id' in parameters:
+        user_client_id = parameters['user_client_id']
+        print(f"✅ Found user_client_id in parameters: {user_client_id}")
+        return user_client_id
+    
+    # Method 4: Try to get from queryResult.outputContexts (Dialogflow might store it in context)
+    output_contexts = req.get('queryResult', {}).get('outputContexts', [])
+    for context in output_contexts:
+        context_params = context.get('parameters', {})
+        if 'user_client_id' in context_params:
+            user_client_id = context_params['user_client_id']
+            print(f"✅ Found user_client_id in outputContexts: {user_client_id}")
+            return user_client_id
+    
+    # Method 5: Try to get from queryResult.inputContexts
+    input_contexts = req.get('queryResult', {}).get('inputContexts', [])
+    for context in input_contexts:
+        context_params = context.get('parameters', {})
+        if 'user_client_id' in context_params:
+            user_client_id = context_params['user_client_id']
+            print(f"✅ Found user_client_id in inputContexts: {user_client_id}")
+            return user_client_id
+    
+    # Method 6: Fallback to session ID (less reliable for persistence)
     session_id = req.get('session', '')
     print(f"⚠️ No frontend user_client_id found, using session ID: {session_id}")
     
@@ -100,9 +150,30 @@ def webhook():
             "fulfillmentText": "I'm sorry, there was an error processing your request. Please try again."
         })
 
+    # Migrate old reminders (run once per request to clean up old data)
+    migrate_old_reminders()
+    
     # Extract user_client_id for this request
     user_client_id = get_user_client_id(req)
-    print(f"User Client ID: {user_client_id}")
+    print(f"Final User Client ID: {user_client_id}")
+    
+    # TEMPORARY FIX: If we're using session ID, create a more persistent identifier
+    if user_client_id.startswith('dfMessenger-'):
+        # Create a hash-based user ID that's more persistent
+        import hashlib
+        session_hash = hashlib.md5(user_client_id.encode()).hexdigest()[:16]
+        persistent_user_id = f"user_{session_hash}"
+        print(f"⚠️ Converting session ID to persistent ID: {user_client_id} -> {persistent_user_id}")
+        user_client_id = persistent_user_id
+    else:
+        print(f"✅ Using frontend user_client_id: {user_client_id}")
+    
+    # Debug: Let's see what's actually in the request
+    print("=== REQUEST DEBUG ===")
+    print(f"queryResult.queryParams: {req.get('queryResult', {}).get('queryParams', {})}")
+    print(f"originalDetectIntentRequest: {req.get('originalDetectIntentRequest', {})}")
+    print(f"session: {req.get('session', '')}")
+    print("=== END REQUEST DEBUG ===")
 
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
@@ -167,6 +238,15 @@ def webhook():
 
         try:
             print(f"Searching for reminders with user_client_id: {user_client_id}, task: {task_to_delete}")
+            
+            # DEBUG: Check ALL reminders in database to see user isolation
+            all_reminders = db.collection('reminders').limit(20).get()
+            print(f"=== DATABASE DEBUG ===")
+            print(f"Total reminders in database: {len(all_reminders)}")
+            for doc in all_reminders:
+                data = doc.to_dict()
+                print(f"Reminder {doc.id}: user_client_id='{data.get('user_client_id', 'MISSING')}', task='{data.get('task')}', status='{data.get('status')}'")
+            print("=== END DATABASE DEBUG ===")
             
             query = db.collection('reminders') \
                       .where('user_client_id', '==', user_client_id) \
