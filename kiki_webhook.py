@@ -129,6 +129,21 @@ def get_user_client_id(req):
         print(f"✅ Found kiki_user_client_id in stored mapping: {user_client_id}")
         return user_client_id
     
+    # Method 7: Try to extract from the raw request body (last resort)
+    try:
+        raw_data = request.get_data(as_text=True)
+        print(f"Raw request data: {raw_data}")
+        if 'kiki_user_client_id' in raw_data:
+            # Simple string extraction as last resort
+            import re
+            match = re.search(r'"kiki_user_client_id"\s*:\s*"([^"]+)"', raw_data)
+            if match:
+                frontend_user_id = match.group(1)
+                print(f"✅ Found kiki_user_client_id in raw data: {frontend_user_id}")
+                return frontend_user_id
+    except Exception as e:
+        print(f"Error parsing raw data: {e}")
+    
     # NO SESSION ID FALLBACK - Only use frontend UUID
     print(f"❌ No frontend kiki_user_client_id found anywhere!")
     print(f"❌ Session ID available but NOT using it: {session_id}")
@@ -195,6 +210,21 @@ def webhook():
     if session_id and session_id in user_mappings:
         frontend_user_id = user_mappings[session_id]
         print(f"✅ Found kiki_user_client_id in stored mapping: {frontend_user_id}")
+    
+    # Method 8: Try to extract from the raw request body (last resort)
+    if not frontend_user_id:
+        try:
+            raw_data = request.get_data(as_text=True)
+            print(f"Raw request data: {raw_data}")
+            if 'kiki_user_client_id' in raw_data:
+                # Simple string extraction as last resort
+                import re
+                match = re.search(r'"kiki_user_client_id"\s*:\s*"([^"]+)"', raw_data)
+                if match:
+                    frontend_user_id = match.group(1)
+                    print(f"✅ Found kiki_user_client_id in raw data: {frontend_user_id}")
+        except Exception as e:
+            print(f"Error parsing raw data: {e}")
     
     # If we found a frontend kiki_user_client_id, use it
     if frontend_user_id:
@@ -820,6 +850,12 @@ def set_user_id():
     except Exception as e:
         print(f"Error in set-user-id: {e}")
         return jsonify({'error': str(e)}), 500
+
+# Simple test endpoint
+@app.route('/test', methods=['GET'])
+def test():
+    """Simple test endpoint to verify the webhook is running"""
+    return jsonify({'status': 'ok', 'message': 'Webhook is running'})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
