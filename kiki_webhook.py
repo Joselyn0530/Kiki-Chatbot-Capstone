@@ -27,6 +27,9 @@ else:
 app = Flask(__name__)
 db = firestore.Client()
 
+# Global variable to store user mappings (in production, use Redis or database)
+user_mappings = {}
+
 # Define the local timezone for display (Malaysia, GMT+8)
 KUALA_LUMPUR_TZ = pytz.timezone('Asia/Kuala_Lumpur')
 
@@ -155,7 +158,7 @@ def webhook():
     
     # Extract user_client_id for this request
     user_client_id = get_user_client_id(req)
-    print(f"Final User Client ID: {user_client_id}")
+    print(f"Initial User Client ID: {user_client_id}")
     
     # FORCE USE OF FRONTEND USER_CLIENT_ID
     # Since Dialogflow is not passing the frontend user_client_id, we need to extract it differently
@@ -194,20 +197,41 @@ def webhook():
         frontend_user_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
         print(f"✅ Found user_client_id in queryResult.queryParams.payload: {frontend_user_id}")
     
+    # Method 7: Check if we have a stored mapping for this session
+    session_id = req.get('session', '')
+    if session_id and session_id in user_mappings:
+        frontend_user_id = user_mappings[session_id]
+        print(f"✅ Found user_client_id in stored mapping: {frontend_user_id}")
+    
     # If we found a frontend user_client_id, use it
     if frontend_user_id:
         user_client_id = frontend_user_id
         print(f"✅ Using frontend user_client_id: {user_client_id}")
     else:
-        # Fallback to session ID with hash conversion
+        # CRITICAL: Since Dialogflow is not passing the frontend user_client_id,
+        # we need to use a different approach. Let's use a hash of the session ID
+        # that will be consistent for the same user across sessions
         if user_client_id.startswith('dfMessenger-'):
             import hashlib
-            session_hash = hashlib.md5(user_client_id.encode()).hexdigest()[:16]
-            persistent_user_id = f"user_{session_hash}"
-            print(f"⚠️ No frontend user_client_id found, converting session ID: {user_client_id} -> {persistent_user_id}")
-            user_client_id = persistent_user_id
+            # Extract the numeric part of the session ID for more consistency
+            session_parts = user_client_id.split('-')
+            if len(session_parts) >= 2:
+                session_number = session_parts[1]
+                # Create a hash based on the session number
+                session_hash = hashlib.md5(session_number.encode()).hexdigest()[:16]
+                persistent_user_id = f"user_{session_hash}"
+                print(f"⚠️ No frontend user_client_id found, converting session ID: {user_client_id} -> {persistent_user_id}")
+                user_client_id = persistent_user_id
+            else:
+                # Fallback to full session ID hash
+                session_hash = hashlib.md5(user_client_id.encode()).hexdigest()[:16]
+                persistent_user_id = f"user_{session_hash}"
+                print(f"⚠️ No frontend user_client_id found, converting session ID: {user_client_id} -> {persistent_user_id}")
+                user_client_id = persistent_user_id
         else:
             print(f"⚠️ Using existing user_client_id: {user_client_id}")
+    
+    print(f"Final User Client ID: {user_client_id}")
     
     # Debug: Let's see what's actually in the request
     print("=== REQUEST DEBUG ===")
@@ -798,6 +822,29 @@ def webhook():
     return jsonify({
         "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting, deleting, or updating a reminder!"
     })
+
+# Custom endpoint to receive user_client_id directly from frontend
+@app.route('/set-user-id', methods=['POST'])
+def set_user_id():
+    """Endpoint to set user_client_id for the current session"""
+    try:
+        data = request.get_json()
+        user_client_id = data.get('user_client_id')
+        session_id = data.get('session_id')
+        
+        if not user_client_id or not session_id:
+            return jsonify({'error': 'Missing user_client_id or session_id'}), 400
+        
+        # Store the mapping in the global variable
+        global user_mappings
+        user_mappings[session_id] = user_client_id
+        print(f"✅ Stored user mapping: {session_id} -> {user_client_id}")
+        
+        return jsonify({'success': True, 'message': 'User ID stored successfully'})
+        
+    except Exception as e:
+        print(f"Error in set-user-id: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
