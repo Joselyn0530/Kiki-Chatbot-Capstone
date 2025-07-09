@@ -609,8 +609,8 @@ def webhook():
                 "fulfillmentText": "I couldn't identify which reminder you meant. Please choose a number from the list or try specifying the time more precisely."
             })
     
-    # Add OpenAI GPT-3.5-Turbo integration for FeelingHappyIntent
-    elif intent_display_name == 'FeelingHappyIntent':
+    # Add OpenAI GPT-3.5-Turbo integration for Feelinghappyintent
+    elif intent_display_name == 'Feelinghappyintent':
         user_message = req.get('queryResult', {}).get('queryText', '')
         openai_api_key = os.environ.get('OPENAI_API_KEY')
         if not openai_api_key:
