@@ -56,44 +56,72 @@ def webhook():
         task = parameters.get('task')  
         date_time_str = parameters.get('date-time') 
 
-        if not task or not date_time_str:
-            print("Missing task or date-time parameter.")
+        # Improved missing parameter handling
+        if not task and not date_time_str:
             return jsonify({
-                "fulfillmentText": "I'm sorry, I couldn't understand the task or time for the reminder. Could you please specify it again?"
+                "fulfillmentText": "Sure! 😊 What should I remind you about?"
             })
-        
-        try:
-            reminder_dt_obj = datetime.fromisoformat(date_time_str)
-
-            reminder_data = {
-                'task': task,
-                'remind_at': reminder_dt_obj,
-                'status': 'pending',
-                'created_at': firestore.SERVER_TIMESTAMP
-            }
-            db.collection('reminders').add(reminder_data)
-            print(f"Reminder saved to Firestore: {reminder_data}")
-
-            user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-
-            response = {
-                "fulfillmentMessages": [
-                    {"text": {"text": [f"Got it! I'll remind you to '{task}' at {user_friendly_time_str}."]}
+        elif not task and date_time_str:
+            # Save time to context and ask for task
+            return jsonify({
+                "fulfillmentText": f"Okay! 🕒 I got the time: {date_time_str}. What should I remind you about?",
+                "outputContexts": [
+                    {
+                        "name": f"{req['session']}/contexts/await_task",
+                        "lifespanCount": 5,
+                        "parameters": {
+                            "date-time": date_time_str
+                        }
                     }
                 ]
-            }
-            return jsonify(response)
+            })
+        elif not date_time_str:
+            # Save task to context and ask for time
+            return jsonify({
+                "fulfillmentText": f"Got it — you want me to remind you to {task}. 📝 When should I remind you?",
+                "outputContexts": [
+                    {
+                        "name": f"{req['session']}/contexts/await_time",
+                        "lifespanCount": 5,
+                        "parameters": {
+                            "task": task
+                        }
+                    }
+                ]
+            })
+        else:
+            try:
+                reminder_dt_obj = datetime.fromisoformat(date_time_str)
 
-        except ValueError as e:
-            print(f"Date parsing error: {e}")
-            return jsonify({
-                "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
-            })
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
-            return jsonify({
-                "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
-            })
+                reminder_data = {
+                    'task': task,
+                    'remind_at': reminder_dt_obj,
+                    'status': 'pending',
+                    'created_at': firestore.SERVER_TIMESTAMP
+                }
+                db.collection('reminders').add(reminder_data)
+                print(f"Reminder saved to Firestore: {reminder_data}")
+
+                user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+
+                response = {
+                    "fulfillmentMessages": [
+                        {"text": {"text": [f"Got it! I'll remind you to '{task}' at {user_friendly_time_str}."]}
+                        }
+                    ]
+                }
+                return jsonify(response)
+
+            except ValueError as e:
+                print(f"Date parsing error: {e}")
+                return jsonify({
+                    "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
+                })
+            except Exception as e:
+                print(f"An unexpected error occurred: {e}")
+                return jsonify({
+                    "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
+                })
 
     # Handle delete.reminder intent (initial request to find and confirm)
     elif intent_display_name == 'delete.reminder': 
@@ -636,6 +664,80 @@ def webhook():
                 "fulfillmentText": "Sorry, I couldn't process your request right now."
             })
     
+    # Handle CaptureTimeIntent for time follow-up
+    elif intent_display_name == 'CaptureTimeIntent':
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        date_time = parameters.get('date-time')
+
+        # Get task from context
+        context_list = req.get('queryResult', {}).get('outputContexts', [])
+        task = None
+        for context in context_list:
+            if 'await_time' in context.get('name', ''):
+                task = context.get('parameters', {}).get('task')
+
+        if task and date_time:
+            try:
+                # Parse the date_time string to datetime object
+                reminder_dt_obj = datetime.fromisoformat(date_time)
+                reminder_data = {
+                    'task': task,
+                    'remind_at': reminder_dt_obj,
+                    'status': 'pending',
+                    'created_at': firestore.SERVER_TIMESTAMP
+                }
+                db.collection('reminders').add(reminder_data)
+                # Format time for user-friendly display
+                user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                return jsonify({
+                    "fulfillmentText": f"All set! I’ll remind you to {task} at {user_friendly_time_str}. ✅"
+                })
+            except Exception as e:
+                print(f"Error saving reminder in CaptureTimeIntent: {e}")
+                return jsonify({
+                    "fulfillmentText": "Sorry, I couldn't save your reminder. Please try again."
+                })
+        else:
+            return jsonify({
+                "fulfillmentText": "Hmm, I’m still missing some info. Could you try again?"
+            })
+
+    # Handle CaptureTaskIntent for task follow-up
+    elif intent_display_name == 'CaptureTaskIntent':
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        task = parameters.get('task')
+
+        # Get time from context
+        context_list = req.get('queryResult', {}).get('outputContexts', [])
+        date_time_str = None
+        for context in context_list:
+            if 'await_task' in context.get('name', ''):
+                date_time_str = context.get('parameters', {}).get('date-time')
+
+        if task and date_time_str:
+            try:
+                reminder_dt_obj = datetime.fromisoformat(date_time_str)
+                reminder_data = {
+                    'task': task,
+                    'remind_at': reminder_dt_obj,
+                    'status': 'pending',
+                    'created_at': firestore.SERVER_TIMESTAMP
+                }
+                db.collection('reminders').add(reminder_data)
+                user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                return jsonify({
+                    "fulfillmentText": f"All set! ✅ I’ll remind you to {task} at {user_friendly_time_str}."
+                })
+            except Exception as e:
+                print(f"Error saving reminder in CaptureTaskIntent: {e}")
+                return jsonify({
+                    "fulfillmentText": "Sorry, I couldn't save your reminder. Please try again."
+                })
+        else:
+            return jsonify({
+                "fulfillmentText": "Oops! I need both the task and the time. Could you try again?"
+            })
+
     # Fallback if no specific intent is matched
     return jsonify({
         "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting, deleting, or updating a reminder!"
