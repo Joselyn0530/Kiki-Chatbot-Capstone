@@ -167,7 +167,7 @@ def webhook():
     # Extract user_client_id for this request
     user_client_id = get_user_client_id(req)
     print(f"Initial User Client ID: {user_client_id}")
-    
+
     # FORCE USE OF FRONTEND KIKI_USER_CLIENT_ID ONLY
     # NO SESSION ID FALLBACK - Only use frontend UUID
     print("=== FORCING FRONTEND KIKI_USER_CLIENT_ID EXTRACTION ===")
@@ -225,6 +225,15 @@ def webhook():
                     print(f"✅ Found kiki_user_client_id in raw data: {frontend_user_id}")
         except Exception as e:
             print(f"Error parsing raw data: {e}")
+    
+    # Method 9: Check all request headers
+    if not frontend_user_id:
+        print("=== CHECKING ALL REQUEST HEADERS ===")
+        for header_name, header_value in request.headers.items():
+            print(f"Header {header_name}: {header_value}")
+            if 'kiki' in header_name.lower() or 'user' in header_name.lower():
+                print(f"Found relevant header: {header_name} = {header_value}")
+        print("=== END HEADERS ===")
     
     # If we found a frontend kiki_user_client_id, use it
     if frontend_user_id:
@@ -856,6 +865,97 @@ def set_user_id():
 def test():
     """Simple test endpoint to verify the webhook is running"""
     return jsonify({'status': 'ok', 'message': 'Webhook is running'})
+
+# Custom webhook endpoint with user ID in URL
+@app.route('/webhook/<user_id>', methods=['POST'])
+def webhook_with_user_id(user_id):
+    """Webhook endpoint with user ID embedded in URL"""
+    req = request.get_json(silent=True, force=True)
+    print(f"Dialogflow Request with User ID: {req}")
+    print(f"User ID from URL: {user_id}")
+
+    # Add null safety for request
+    if not req:
+        print("Error: Request is None")
+        return jsonify({
+            "fulfillmentText": "I'm sorry, there was an error processing your request. Please try again."
+        })
+
+    # Migrate old reminders (run once per request to clean up old data)
+    migrate_old_reminders()
+    
+    # Use the user ID from the URL
+    user_client_id = user_id
+    print(f"Using User Client ID from URL: {user_client_id}")
+    
+    # Now process the request using the same logic as the main webhook
+    # but with the user_id from the URL
+    return process_webhook_request(req, user_client_id)
+
+def process_webhook_request(req, user_client_id):
+    """Process webhook request with the given user_client_id"""
+    # This function contains all the webhook logic from the main webhook function
+    # but uses the provided user_client_id instead of extracting it
+    
+    intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
+    print(f"Intent Display Name: {intent_display_name}")
+    
+    # Handle set.reminder intent
+    if intent_display_name == 'set.reminder':
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        task = parameters.get('task')
+        date_time_str = parameters.get('date-time')
+        
+        if not task:
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I didn't catch what you want to be reminded about. Please tell me the task again."
+            })
+        
+        if not date_time_str:
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I didn't catch when you want to be reminded. Please tell me the time again."
+            })
+        
+        try:
+            # Parse the date-time string
+            dt_obj = datetime.fromisoformat(date_time_str)
+            
+            # Save to Firestore
+            reminder_data = {
+                'user_client_id': user_client_id,
+                'task': task,
+                'remind_at': dt_obj,
+                'status': 'pending',
+                'created_at': firestore.SERVER_TIMESTAMP
+            }
+            
+            print(f"About to save reminder with user_client_id: {user_client_id}")
+            doc_ref = db.collection('reminders').add(reminder_data)
+            print(f"Reminder saved to Firestore with ID: {doc_ref[1].id}")
+            print(f"Reminder data: {reminder_data}")
+            
+            # Format the time for user-friendly display
+            user_friendly_time_str = dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+            
+            return jsonify({
+                "fulfillmentText": f"Perfect! I've set a reminder for you to '{task}' at {user_friendly_time_str}."
+            })
+            
+        except ValueError as e:
+            print(f"Date parsing error: {e}")
+            return jsonify({
+                "fulfillmentText": "I had trouble understanding the time you specified. Please try again with a clear time, like 'tomorrow at 3pm' or 'next Friday at 10am'."
+            })
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return jsonify({
+                "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
+            })
+    
+    # For now, return a simple response for other intents
+    return jsonify({
+        "fulfillmentText": f"Intent '{intent_display_name}' received for user {user_client_id}. This endpoint is still being developed."
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
