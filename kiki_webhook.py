@@ -110,8 +110,9 @@ def webhook():
         if task:
             task = task.strip().lower()
         GENERIC_TASKS = {"set a reminder", "reminder", "remind me", "remind", "add reminder"}
+        date_time_str = extract_datetime_str(parameters.get('date-time'))
+        # If task is generic, clear contexts and prompt for real task
         if task and task in GENERIC_TASKS:
-            # Clear both task and time contexts to avoid using previous values
             return jsonify({
                 "fulfillmentText": "Sure! ☺️ What should I remind you about?",
                 "outputContexts": [
@@ -119,36 +120,39 @@ def webhook():
                     {"name": f"{req['session']}/contexts/await_time", "lifespanCount": 0, "parameters": {}}
                 ]
             })
-        date_time_str = extract_datetime_str(parameters.get('date-time'))
-        # Improved missing parameter handling
-        if not task and not date_time_str:
+        # If both missing, prompt for task
+        if not task and not (isinstance(date_time_str, str) and date_time_str.strip()):
             return jsonify({
                 "fulfillmentText": "Sure! 😊 What should I remind you about?"
             })
-        elif not task and date_time_str:
-            # Format the time for user-friendly display
+        # If only time present, but it's empty/invalid, just ask for task
+        if not task and (not isinstance(date_time_str, str) or not date_time_str.strip()):
+            return jsonify({
+                "fulfillmentText": "Sure! 😊 What should I remind you about?"
+            })
+        # If only time present and valid, prompt for task and set context
+        if not task and (isinstance(date_time_str, str) and date_time_str.strip()):
             try:
-                dt_str = extract_datetime_str(date_time_str)
-                dt_obj = datetime.fromisoformat(dt_str)
+                dt_obj = datetime.fromisoformat(date_time_str)
                 user_friendly_time_str = dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
             except Exception:
                 user_friendly_time_str = str(date_time_str)
-            # Save time to context and ask for task
             return jsonify({
                 "fulfillmentText": f"Okay! 🕒 I got the time: {user_friendly_time_str}. What should I remind you about?",
                 "outputContexts": [
                     {"name": f"{req['session']}/contexts/await_task", "lifespanCount": 2, "parameters": {"date-time": date_time_str}}
                 ]
             })
-        elif not date_time_str:
-            # Save task to context and ask for time
+        # If only task present, prompt for time
+        if task and (not isinstance(date_time_str, str) or not date_time_str.strip()):
             return jsonify({
                 "fulfillmentText": f"Got it — you want me to remind you to {task}. 📝 When should I remind you?",
                 "outputContexts": [
                     {"name": f"{req['session']}/contexts/await_time", "lifespanCount": 2, "parameters": {"task": task}}
                 ]
             })
-        else:
+        # If both present and valid, save reminder
+        if task and (isinstance(date_time_str, str) and date_time_str.strip()):
             try:
                 reminder_dt_obj = datetime.fromisoformat(date_time_str)
                 reminder_data = {
@@ -180,6 +184,10 @@ def webhook():
                 return jsonify({
                     "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
                 })
+        # Fallback: prompt for missing info
+        return jsonify({
+            "fulfillmentText": "I need both the task and the time to set your reminder. Please try again."
+        })
     # --- END REMINDER INTENTS ---
 
     # Handle delete.reminder intent (initial request to find and confirm)
