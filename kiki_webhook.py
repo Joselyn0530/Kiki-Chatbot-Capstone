@@ -235,17 +235,17 @@ def webhook():
                     }
                     return jsonify(response)
                 elif len(found_reminders) > 1:
-                    reminder_list_text = f"I found several reminders to '{task_to_delete}':\n"
+                    reminder_list_text = f"I found several reminders to '{task_to_delete}':\n\n"
                     clarification_reminders_data = []
                     for i, reminder in enumerate(found_reminders):
-                        reminder_list_text += f"{i+1}. {reminder['task'].capitalize()} at {reminder['remind_at']}\n"
+                        reminder_list_text += f"{i+1}. {reminder['task'].capitalize()} at {reminder['remind_at']}\n\n"
                         clarification_reminders_data.append({
                             'id': reminder['id'],
                             'task': reminder['task'],
                             'time': reminder['remind_at'],
                             'time_raw': reminder['remind_at_raw']
                         })
-                    reminder_list_text += "\nPlease reply with the number, like “1” or “2”."
+                    reminder_list_text += "Please reply with the number, like “1” or “2”."
                     session_id = req['session']
                     response = {
                         "fulfillmentText": reminder_list_text,
@@ -335,7 +335,7 @@ def webhook():
                             "lifespanCount": 0
                         },
                         {
-                            "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                            "name": f"{session_id}/contexts/awaiting_deletion_selection",
                             "lifespanCount": 0
                         }
                     ]
@@ -361,7 +361,7 @@ def webhook():
                     "lifespanCount": 0
                 },
                 {
-                    "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                    "name": f"{session_id}/contexts/awaiting_deletion_selection",
                     "lifespanCount": 0
                 }
             ]
