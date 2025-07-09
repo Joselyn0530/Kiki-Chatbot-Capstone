@@ -62,9 +62,20 @@ def webhook():
                 "fulfillmentText": "Sure! 😊 What should I remind you about?"
             })
         elif not task and date_time_str:
+            # Format the time for user-friendly display
+            try:
+                # Handle dict or string
+                if isinstance(date_time_str, dict) and 'date_time' in date_time_str:
+                    dt_str = date_time_str['date_time']
+                else:
+                    dt_str = date_time_str
+                dt_obj = datetime.fromisoformat(dt_str)
+                user_friendly_time_str = dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+            except Exception:
+                user_friendly_time_str = str(date_time_str)
             # Save time to context and ask for task
             return jsonify({
-                "fulfillmentText": f"Okay! 🕒 I got the time: {date_time_str}. What should I remind you about?",
+                "fulfillmentText": f"Okay! 🕒 I got the time: {user_friendly_time_str}. What should I remind you about?",
                 "outputContexts": [
                     {
                         "name": f"{req['session']}/contexts/await_task",
@@ -675,11 +686,18 @@ def webhook():
         for context in context_list:
             if 'await_time' in context.get('name', ''):
                 task = context.get('parameters', {}).get('task')
+        if isinstance(task, list):
+            task = task[0] if task else None
 
-        if task and date_time:
+        # Handle Dialogflow's date-time as dict or string
+        if isinstance(date_time, dict) and 'date_time' in date_time:
+            date_time_str = date_time['date_time']
+        else:
+            date_time_str = date_time
+
+        if task and date_time_str and date_time_str.strip():
             try:
-                # Parse the date_time string to datetime object
-                reminder_dt_obj = datetime.fromisoformat(date_time)
+                reminder_dt_obj = datetime.fromisoformat(date_time_str)
                 reminder_data = {
                     'task': task,
                     'remind_at': reminder_dt_obj,
@@ -687,7 +705,6 @@ def webhook():
                     'created_at': firestore.SERVER_TIMESTAMP
                 }
                 db.collection('reminders').add(reminder_data)
-                # Format time for user-friendly display
                 user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                 return jsonify({
                     "fulfillmentText": f"All set! I’ll remind you to {task} at {user_friendly_time_str}. ✅"
