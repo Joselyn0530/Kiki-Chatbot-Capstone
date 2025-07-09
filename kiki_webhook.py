@@ -65,14 +65,14 @@ def migrate_old_reminders():
     except Exception as e:
         print(f"Error migrating old reminders: {e}")
 
-# Helper function to extract user_client_id from Dialogflow request
+# Helper function to extract kiki_user_client_id from Dialogflow request
 def get_user_client_id(req):
-    """Extract user_client_id from Dialogflow request - prioritize frontend user ID"""
+    """Extract kiki_user_client_id from Dialogflow request - ONLY use frontend UUID"""
     if not req:
         print("Warning: Request object is None, using default user ID")
         return 'unknown_user'
     
-    print("=== USER CLIENT ID EXTRACTION ===")
+    print("=== KIKI USER CLIENT ID EXTRACTION ===")
     
     # Method 1: Try to get from frontend payload (most reliable for persistence)
     query_params = req.get('queryResult', {}).get('queryParams', {})
@@ -80,9 +80,9 @@ def get_user_client_id(req):
     if query_params and 'payload' in query_params:
         payload = query_params['payload']
         print(f"payload: {payload}")
-        if 'user_client_id' in payload:
-            user_client_id = payload['user_client_id']
-            print(f"✅ Found frontend user_client_id: {user_client_id}")
+        if 'kiki_user_client_id' in payload:
+            user_client_id = payload['kiki_user_client_id']
+            print(f"✅ Found frontend kiki_user_client_id: {user_client_id}")
             return user_client_id
     
     # Method 2: Try to get from originalDetectIntentRequest payload
@@ -91,54 +91,47 @@ def get_user_client_id(req):
     if original_request and 'payload' in original_request:
         original_payload = original_request['payload']
         print(f"original_payload: {original_payload}")
-        if 'user_client_id' in original_payload:
-            user_client_id = original_payload['user_client_id']
-            print(f"✅ Found user_client_id in originalDetectIntentRequest: {user_client_id}")
+        if 'kiki_user_client_id' in original_payload:
+            user_client_id = original_payload['kiki_user_client_id']
+            print(f"✅ Found kiki_user_client_id in originalDetectIntentRequest: {user_client_id}")
             return user_client_id
     
     # Method 3: Try to get from queryResult.parameters (Dialogflow might store it here)
     parameters = req.get('queryResult', {}).get('parameters', {})
     print(f"parameters: {parameters}")
-    if 'user_client_id' in parameters:
-        user_client_id = parameters['user_client_id']
-        print(f"✅ Found user_client_id in parameters: {user_client_id}")
+    if 'kiki_user_client_id' in parameters:
+        user_client_id = parameters['kiki_user_client_id']
+        print(f"✅ Found kiki_user_client_id in parameters: {user_client_id}")
         return user_client_id
     
     # Method 4: Try to get from queryResult.outputContexts (Dialogflow might store it in context)
     output_contexts = req.get('queryResult', {}).get('outputContexts', [])
     for context in output_contexts:
         context_params = context.get('parameters', {})
-        if 'user_client_id' in context_params:
-            user_client_id = context_params['user_client_id']
-            print(f"✅ Found user_client_id in outputContexts: {user_client_id}")
+        if 'kiki_user_client_id' in context_params:
+            user_client_id = context_params['kiki_user_client_id']
+            print(f"✅ Found kiki_user_client_id in outputContexts: {user_client_id}")
             return user_client_id
     
     # Method 5: Try to get from queryResult.inputContexts
     input_contexts = req.get('queryResult', {}).get('inputContexts', [])
     for context in input_contexts:
         context_params = context.get('parameters', {})
-        if 'user_client_id' in context_params:
-            user_client_id = context_params['user_client_id']
-            print(f"✅ Found user_client_id in inputContexts: {user_client_id}")
+        if 'kiki_user_client_id' in context_params:
+            user_client_id = context_params['kiki_user_client_id']
+            print(f"✅ Found kiki_user_client_id in inputContexts: {user_client_id}")
             return user_client_id
     
-    # Method 6: Fallback to session ID (less reliable for persistence)
+    # Method 6: Check if we have a stored mapping for this session
     session_id = req.get('session', '')
-    print(f"⚠️ No frontend user_client_id found, using session ID: {session_id}")
+    if session_id and session_id in user_mappings:
+        user_client_id = user_mappings[session_id]
+        print(f"✅ Found kiki_user_client_id in stored mapping: {user_client_id}")
+        return user_client_id
     
-    if session_id:
-        # Extract user ID from session path: projects/PROJECT_ID/agent/sessions/USER_ID
-        parts = session_id.split('/')
-        if len(parts) >= 6:
-            user_id = parts[-1]  # Last part is the user ID
-            print(f"⚠️ Using session ID as user ID: {user_id}")
-            return user_id
-        else:
-            print(f"⚠️ Using full session ID as user ID: {session_id}")
-            return session_id
-    
-    # Final fallback
-    print(f"❌ No user identifier found, using fallback: unknown_user")
+    # NO SESSION ID FALLBACK - Only use frontend UUID
+    print(f"❌ No frontend kiki_user_client_id found anywhere!")
+    print(f"❌ Session ID available but NOT using it: {session_id}")
     return 'unknown_user'
 
 @app.route('/', methods=['POST'])
@@ -160,76 +153,58 @@ def webhook():
     user_client_id = get_user_client_id(req)
     print(f"Initial User Client ID: {user_client_id}")
     
-    # FORCE USE OF FRONTEND USER_CLIENT_ID
-    # Since Dialogflow is not passing the frontend user_client_id, we need to extract it differently
-    print("=== FORCING FRONTEND USER_CLIENT_ID EXTRACTION ===")
+    # FORCE USE OF FRONTEND KIKI_USER_CLIENT_ID ONLY
+    # NO SESSION ID FALLBACK - Only use frontend UUID
+    print("=== FORCING FRONTEND KIKI_USER_CLIENT_ID EXTRACTION ===")
     
-    # Try to get the frontend user_client_id from multiple locations
+    # Try to get the frontend kiki_user_client_id from multiple locations
     frontend_user_id = None
     
     # Method 1: Check if it's in the request headers
-    if request.headers.get('X-User-Client-ID'):
-        frontend_user_id = request.headers.get('X-User-Client-ID')
-        print(f"✅ Found user_client_id in headers: {frontend_user_id}")
+    if request.headers.get('X-Kiki-User-Client-ID'):
+        frontend_user_id = request.headers.get('X-Kiki-User-Client-ID')
+        print(f"✅ Found kiki_user_client_id in headers: {frontend_user_id}")
     
     # Method 2: Check if it's in the request body as a custom field
-    elif req.get('user_client_id'):
-        frontend_user_id = req.get('user_client_id')
-        print(f"✅ Found user_client_id in request body: {frontend_user_id}")
+    elif req.get('kiki_user_client_id'):
+        frontend_user_id = req.get('kiki_user_client_id')
+        print(f"✅ Found kiki_user_client_id in request body: {frontend_user_id}")
     
     # Method 3: Check if it's in the originalDetectIntentRequest
-    elif req.get('originalDetectIntentRequest', {}).get('user_client_id'):
-        frontend_user_id = req.get('originalDetectIntentRequest', {}).get('user_client_id')
-        print(f"✅ Found user_client_id in originalDetectIntentRequest: {frontend_user_id}")
+    elif req.get('originalDetectIntentRequest', {}).get('kiki_user_client_id'):
+        frontend_user_id = req.get('originalDetectIntentRequest', {}).get('kiki_user_client_id')
+        print(f"✅ Found kiki_user_client_id in originalDetectIntentRequest: {frontend_user_id}")
     
     # Method 4: Check if it's in the queryResult directly
-    elif req.get('queryResult', {}).get('user_client_id'):
-        frontend_user_id = req.get('queryResult', {}).get('user_client_id')
-        print(f"✅ Found user_client_id in queryResult: {frontend_user_id}")
+    elif req.get('queryResult', {}).get('kiki_user_client_id'):
+        frontend_user_id = req.get('queryResult', {}).get('kiki_user_client_id')
+        print(f"✅ Found kiki_user_client_id in queryResult: {frontend_user_id}")
     
     # Method 5: Check if it's in queryResult.parameters
-    elif req.get('queryResult', {}).get('parameters', {}).get('user_client_id'):
-        frontend_user_id = req.get('queryResult', {}).get('parameters', {}).get('user_client_id')
-        print(f"✅ Found user_client_id in queryResult.parameters: {frontend_user_id}")
+    elif req.get('queryResult', {}).get('parameters', {}).get('kiki_user_client_id'):
+        frontend_user_id = req.get('queryResult', {}).get('parameters', {}).get('kiki_user_client_id')
+        print(f"✅ Found kiki_user_client_id in queryResult.parameters: {frontend_user_id}")
     
     # Method 6: Check if it's in queryResult.queryParams.payload
-    elif req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id'):
-        frontend_user_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
-        print(f"✅ Found user_client_id in queryResult.queryParams.payload: {frontend_user_id}")
+    elif req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('kiki_user_client_id'):
+        frontend_user_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('kiki_user_client_id')
+        print(f"✅ Found kiki_user_client_id in queryResult.queryParams.payload: {frontend_user_id}")
     
     # Method 7: Check if we have a stored mapping for this session
     session_id = req.get('session', '')
     if session_id and session_id in user_mappings:
         frontend_user_id = user_mappings[session_id]
-        print(f"✅ Found user_client_id in stored mapping: {frontend_user_id}")
+        print(f"✅ Found kiki_user_client_id in stored mapping: {frontend_user_id}")
     
-    # If we found a frontend user_client_id, use it
+    # If we found a frontend kiki_user_client_id, use it
     if frontend_user_id:
         user_client_id = frontend_user_id
-        print(f"✅ Using frontend user_client_id: {user_client_id}")
+        print(f"✅ Using frontend kiki_user_client_id: {user_client_id}")
     else:
-        # CRITICAL: Since Dialogflow is not passing the frontend user_client_id,
-        # we need to use a different approach. Let's use a hash of the session ID
-        # that will be consistent for the same user across sessions
-        if user_client_id.startswith('dfMessenger-'):
-            import hashlib
-            # Extract the numeric part of the session ID for more consistency
-            session_parts = user_client_id.split('-')
-            if len(session_parts) >= 2:
-                session_number = session_parts[1]
-                # Create a hash based on the session number
-                session_hash = hashlib.md5(session_number.encode()).hexdigest()[:16]
-                persistent_user_id = f"user_{session_hash}"
-                print(f"⚠️ No frontend user_client_id found, converting session ID: {user_client_id} -> {persistent_user_id}")
-                user_client_id = persistent_user_id
-            else:
-                # Fallback to full session ID hash
-                session_hash = hashlib.md5(user_client_id.encode()).hexdigest()[:16]
-                persistent_user_id = f"user_{session_hash}"
-                print(f"⚠️ No frontend user_client_id found, converting session ID: {user_client_id} -> {persistent_user_id}")
-                user_client_id = persistent_user_id
-        else:
-            print(f"⚠️ Using existing user_client_id: {user_client_id}")
+        # NO SESSION ID FALLBACK - Only use frontend UUID
+        print(f"❌ No frontend kiki_user_client_id found anywhere!")
+        print(f"❌ Session ID available but NOT using it: {session_id}")
+        user_client_id = 'unknown_user'
     
     print(f"Final User Client ID: {user_client_id}")
     
@@ -823,24 +798,24 @@ def webhook():
         "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting, deleting, or updating a reminder!"
     })
 
-# Custom endpoint to receive user_client_id directly from frontend
+# Custom endpoint to receive kiki_user_client_id directly from frontend
 @app.route('/set-user-id', methods=['POST'])
 def set_user_id():
-    """Endpoint to set user_client_id for the current session"""
+    """Endpoint to set kiki_user_client_id for the current session"""
     try:
         data = request.get_json()
-        user_client_id = data.get('user_client_id')
+        kiki_user_client_id = data.get('kiki_user_client_id')
         session_id = data.get('session_id')
         
-        if not user_client_id or not session_id:
-            return jsonify({'error': 'Missing user_client_id or session_id'}), 400
+        if not kiki_user_client_id or not session_id:
+            return jsonify({'error': 'Missing kiki_user_client_id or session_id'}), 400
         
         # Store the mapping in the global variable
         global user_mappings
-        user_mappings[session_id] = user_client_id
-        print(f"✅ Stored user mapping: {session_id} -> {user_client_id}")
+        user_mappings[session_id] = kiki_user_client_id
+        print(f"✅ Stored kiki user mapping: {session_id} -> {kiki_user_client_id}")
         
-        return jsonify({'success': True, 'message': 'User ID stored successfully'})
+        return jsonify({'success': True, 'message': 'Kiki User ID stored successfully'})
         
     except Exception as e:
         print(f"Error in set-user-id: {e}")
