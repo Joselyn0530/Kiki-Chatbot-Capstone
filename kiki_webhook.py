@@ -858,6 +858,21 @@ def webhook():
                 date_time = context.get('parameters', {}).get('date-time')
         date_time_str = extract_datetime_str(date_time)
 
+        # If only a task is present and no valid date-time, prompt for time and set await_time context
+        if task and (not date_time_str or not (isinstance(date_time_str, str) and date_time_str.strip())):
+            return jsonify({
+                "fulfillmentText": f"Great! What time should I remind you to {task}?",
+                "outputContexts": [
+                    {
+                        "name": f"{req['session']}/contexts/await_time",
+                        "lifespanCount": 2,
+                        "parameters": {
+                            "task": task
+                        }
+                    }
+                ]
+            })
+
         if task and date_time_str and isinstance(date_time_str, str) and date_time_str.strip():
             try:
                 reminder_dt_obj = datetime.fromisoformat(date_time_str)
