@@ -44,34 +44,49 @@ def get_context_parameter(req_payload, context_name_part, param_name):
 
 # Helper function to extract user_client_id from Dialogflow request
 def get_user_client_id(req):
-    """Extract user_client_id from Dialogflow request"""
+    """Extract user_client_id from Dialogflow request - prioritize frontend user ID"""
     if not req:
         print("Warning: Request object is None, using default user ID")
         return 'unknown_user'
     
-    # Try to get from session ID (most reliable method)
+    print("=== USER CLIENT ID EXTRACTION ===")
+    
+    # Method 1: Try to get from frontend payload (most reliable for persistence)
+    query_params = req.get('queryResult', {}).get('queryParams', {})
+    if query_params and 'payload' in query_params:
+        payload = query_params['payload']
+        if 'user_client_id' in payload:
+            user_client_id = payload['user_client_id']
+            print(f"✅ Found frontend user_client_id: {user_client_id}")
+            return user_client_id
+    
+    # Method 2: Try to get from originalDetectIntentRequest payload
+    original_request = req.get('originalDetectIntentRequest', {})
+    if original_request and 'payload' in original_request:
+        original_payload = original_request['payload']
+        if 'user_client_id' in original_payload:
+            user_client_id = original_payload['user_client_id']
+            print(f"✅ Found user_client_id in originalDetectIntentRequest: {user_client_id}")
+            return user_client_id
+    
+    # Method 3: Fallback to session ID (less reliable for persistence)
     session_id = req.get('session', '')
-    print(f"Session ID: {session_id}")
+    print(f"⚠️ No frontend user_client_id found, using session ID: {session_id}")
     
     if session_id:
         # Extract user ID from session path: projects/PROJECT_ID/agent/sessions/USER_ID
         parts = session_id.split('/')
-        print(f"Session parts: {parts}")
         if len(parts) >= 6:
             user_id = parts[-1]  # Last part is the user ID
-            print(f"Extracted user ID from session: {user_id}")
+            print(f"⚠️ Using session ID as user ID: {user_id}")
             return user_id
+        else:
+            print(f"⚠️ Using full session ID as user ID: {session_id}")
+            return session_id
     
-    # Fallback: try to get from user ID field
-    user_id = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('user', {}).get('userId')
-    if user_id:
-        print(f"Found user ID in payload: {user_id}")
-        return user_id
-    
-    # If no user ID found, use session ID as fallback
-    fallback_id = session_id or 'unknown_user'
-    print(f"Using fallback user ID: {fallback_id}")
-    return fallback_id
+    # Final fallback
+    print(f"❌ No user identifier found, using fallback: unknown_user")
+    return 'unknown_user'
 
 @app.route('/', methods=['POST'])
 def webhook():
@@ -153,13 +168,6 @@ def webhook():
         try:
             print(f"Searching for reminders with user_client_id: {user_client_id}, task: {task_to_delete}")
             
-            # DEBUG: Let's see ALL reminders in the database to understand the issue
-            all_reminders = db.collection('reminders').limit(10).get()
-            print(f"DEBUG: Total reminders in database: {len(all_reminders)}")
-            for doc in all_reminders:
-                data = doc.to_dict()
-                print(f"DEBUG: Reminder {doc.id}: user_client_id={data.get('user_client_id', 'MISSING')}, task={data.get('task')}, status={data.get('status')}")
-            
             query = db.collection('reminders') \
                       .where('user_client_id', '==', user_client_id) \
                       .where('task', '==', task_to_delete) \
@@ -212,11 +220,10 @@ def webhook():
             else:
                 # No specific time provided, list multiple if found
                 docs = query.limit(5).get() # Limit to a reasonable number of results
-                print(f"Found {len(docs)} documents for user {user_client_id}")
+                print(f"Found {len(docs)} reminders for user {user_client_id}")
 
                 for doc in docs:
                     data = doc.to_dict()
-                    print(f"Document {doc.id}: user_client_id={data.get('user_client_id')}, task={data.get('task')}")
                     found_reminders.append({
                         'id': doc.id,
                         'task': data['task'],
