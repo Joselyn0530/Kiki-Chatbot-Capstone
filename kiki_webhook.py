@@ -27,9 +27,6 @@ else:
 app = Flask(__name__)
 db = firestore.Client()
 
-# Global variable to store user mappings (in production, use Redis or database)
-user_mappings = {}
-
 # Define the local timezone for display (Malaysia, GMT+8)
 KUALA_LUMPUR_TZ = pytz.timezone('Asia/Kuala_Lumpur')
 
@@ -45,214 +42,10 @@ def get_context_parameter(req_payload, context_name_part, param_name):
                 return context['parameters'][param_name]
     return None
 
-# Helper function to migrate old reminders without user_client_id
-def migrate_old_reminders():
-    """Migrate old reminders that don't have user_client_id field"""
-    try:
-        # Get all reminders without user_client_id
-        old_reminders = db.collection('reminders').where('user_client_id', '==', None).get()
-        print(f"Found {len(old_reminders)} old reminders without user_client_id")
-        
-        for doc in old_reminders:
-            # Mark these as completed so they don't interfere with user isolation
-            doc.reference.update({
-                'status': 'completed',
-                'user_client_id': 'migrated_old_reminder',
-                'migrated_at': firestore.SERVER_TIMESTAMP
-            })
-            print(f"Migrated old reminder {doc.id}")
-            
-    except Exception as e:
-        print(f"Error migrating old reminders: {e}")
-
-# Helper function to extract kiki_user_client_id from Dialogflow request
-def get_user_client_id(req):
-    """Extract kiki_user_client_id from Dialogflow request - ONLY use frontend UUID"""
-    if not req:
-        print("Warning: Request object is None, using default user ID")
-        return 'unknown_user'
-    
-    print("=== KIKI USER CLIENT ID EXTRACTION ===")
-    
-    # Method 1: Try to get from frontend payload (most reliable for persistence)
-    query_params = req.get('queryResult', {}).get('queryParams', {})
-    print(f"queryParams: {query_params}")
-    if query_params and 'payload' in query_params:
-        payload = query_params['payload']
-        print(f"payload: {payload}")
-        if 'kiki_user_client_id' in payload:
-            user_client_id = payload['kiki_user_client_id']
-            print(f"✅ Found frontend kiki_user_client_id: {user_client_id}")
-            return user_client_id
-    
-    # Method 2: Try to get from originalDetectIntentRequest payload
-    original_request = req.get('originalDetectIntentRequest', {})
-    print(f"originalDetectIntentRequest: {original_request}")
-    if original_request and 'payload' in original_request:
-        original_payload = original_request['payload']
-        print(f"original_payload: {original_payload}")
-        if 'kiki_user_client_id' in original_payload:
-            user_client_id = original_payload['kiki_user_client_id']
-            print(f"✅ Found kiki_user_client_id in originalDetectIntentRequest: {user_client_id}")
-            return user_client_id
-    
-    # Method 3: Try to get from queryResult.parameters (Dialogflow might store it here)
-    parameters = req.get('queryResult', {}).get('parameters', {})
-    print(f"parameters: {parameters}")
-    if 'kiki_user_client_id' in parameters:
-        user_client_id = parameters['kiki_user_client_id']
-        print(f"✅ Found kiki_user_client_id in parameters: {user_client_id}")
-        return user_client_id
-    
-    # Method 4: Try to get from queryResult.outputContexts (Dialogflow might store it in context)
-    output_contexts = req.get('queryResult', {}).get('outputContexts', [])
-    for context in output_contexts:
-        context_params = context.get('parameters', {})
-        if 'kiki_user_client_id' in context_params:
-            user_client_id = context_params['kiki_user_client_id']
-            print(f"✅ Found kiki_user_client_id in outputContexts: {user_client_id}")
-            return user_client_id
-    
-    # Method 5: Try to get from queryResult.inputContexts
-    input_contexts = req.get('queryResult', {}).get('inputContexts', [])
-    for context in input_contexts:
-        context_params = context.get('parameters', {})
-        if 'kiki_user_client_id' in context_params:
-            user_client_id = context_params['kiki_user_client_id']
-            print(f"✅ Found kiki_user_client_id in inputContexts: {user_client_id}")
-            return user_client_id
-    
-    # Method 6: Check if we have a stored mapping for this session
-    session_id = req.get('session', '')
-    if session_id and session_id in user_mappings:
-        user_client_id = user_mappings[session_id]
-        print(f"✅ Found kiki_user_client_id in stored mapping: {user_client_id}")
-        return user_client_id
-    
-    # Method 7: Try to extract from the raw request body (last resort)
-    try:
-        raw_data = request.get_data(as_text=True)
-        print(f"Raw request data: {raw_data}")
-        if 'kiki_user_client_id' in raw_data:
-            # Simple string extraction as last resort
-            import re
-            match = re.search(r'"kiki_user_client_id"\s*:\s*"([^"]+)"', raw_data)
-            if match:
-                frontend_user_id = match.group(1)
-                print(f"✅ Found kiki_user_client_id in raw data: {frontend_user_id}")
-                return frontend_user_id
-    except Exception as e:
-        print(f"Error parsing raw data: {e}")
-    
-    # NO SESSION ID FALLBACK - Only use frontend UUID
-    print(f"❌ No frontend kiki_user_client_id found anywhere!")
-    print(f"❌ Session ID available but NOT using it: {session_id}")
-    return 'unknown_user'
-
 @app.route('/', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
     print(f"Dialogflow Request: {req}")
-
-    # Add null safety for request
-    if not req:
-        print("Error: Request is None")
-        return jsonify({
-            "fulfillmentText": "I'm sorry, there was an error processing your request. Please try again."
-        })
-
-    # Migrate old reminders (run once per request to clean up old data)
-    migrate_old_reminders()
-    
-    # Extract user_client_id for this request
-    user_client_id = get_user_client_id(req)
-    print(f"Initial User Client ID: {user_client_id}")
-
-    # FORCE USE OF FRONTEND KIKI_USER_CLIENT_ID ONLY
-    # NO SESSION ID FALLBACK - Only use frontend UUID
-    print("=== FORCING FRONTEND KIKI_USER_CLIENT_ID EXTRACTION ===")
-    
-    # Try to get the frontend kiki_user_client_id from multiple locations
-    frontend_user_id = None
-    
-    # Method 1: Check if it's in the request headers
-    if request.headers.get('X-Kiki-User-Client-ID'):
-        frontend_user_id = request.headers.get('X-Kiki-User-Client-ID')
-        print(f"✅ Found kiki_user_client_id in headers: {frontend_user_id}")
-    
-    # Method 2: Check if it's in the request body as a custom field
-    elif req.get('kiki_user_client_id'):
-        frontend_user_id = req.get('kiki_user_client_id')
-        print(f"✅ Found kiki_user_client_id in request body: {frontend_user_id}")
-    
-    # Method 3: Check if it's in the originalDetectIntentRequest
-    elif req.get('originalDetectIntentRequest', {}).get('kiki_user_client_id'):
-        frontend_user_id = req.get('originalDetectIntentRequest', {}).get('kiki_user_client_id')
-        print(f"✅ Found kiki_user_client_id in originalDetectIntentRequest: {frontend_user_id}")
-    
-    # Method 4: Check if it's in the queryResult directly
-    elif req.get('queryResult', {}).get('kiki_user_client_id'):
-        frontend_user_id = req.get('queryResult', {}).get('kiki_user_client_id')
-        print(f"✅ Found kiki_user_client_id in queryResult: {frontend_user_id}")
-    
-    # Method 5: Check if it's in queryResult.parameters
-    elif req.get('queryResult', {}).get('parameters', {}).get('kiki_user_client_id'):
-        frontend_user_id = req.get('queryResult', {}).get('parameters', {}).get('kiki_user_client_id')
-        print(f"✅ Found kiki_user_client_id in queryResult.parameters: {frontend_user_id}")
-    
-    # Method 6: Check if it's in queryResult.queryParams.payload
-    elif req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('kiki_user_client_id'):
-        frontend_user_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('kiki_user_client_id')
-        print(f"✅ Found kiki_user_client_id in queryResult.queryParams.payload: {frontend_user_id}")
-    
-    # Method 7: Check if we have a stored mapping for this session
-    session_id = req.get('session', '')
-    if session_id and session_id in user_mappings:
-        frontend_user_id = user_mappings[session_id]
-        print(f"✅ Found kiki_user_client_id in stored mapping: {frontend_user_id}")
-    
-    # Method 8: Try to extract from the raw request body (last resort)
-    if not frontend_user_id:
-        try:
-            raw_data = request.get_data(as_text=True)
-            print(f"Raw request data: {raw_data}")
-            if 'kiki_user_client_id' in raw_data:
-                # Simple string extraction as last resort
-                import re
-                match = re.search(r'"kiki_user_client_id"\s*:\s*"([^"]+)"', raw_data)
-                if match:
-                    frontend_user_id = match.group(1)
-                    print(f"✅ Found kiki_user_client_id in raw data: {frontend_user_id}")
-        except Exception as e:
-            print(f"Error parsing raw data: {e}")
-    
-    # Method 9: Check all request headers
-    if not frontend_user_id:
-        print("=== CHECKING ALL REQUEST HEADERS ===")
-        for header_name, header_value in request.headers.items():
-            print(f"Header {header_name}: {header_value}")
-            if 'kiki' in header_name.lower() or 'user' in header_name.lower():
-                print(f"Found relevant header: {header_name} = {header_value}")
-        print("=== END HEADERS ===")
-    
-    # If we found a frontend kiki_user_client_id, use it
-    if frontend_user_id:
-        user_client_id = frontend_user_id
-        print(f"✅ Using frontend kiki_user_client_id: {user_client_id}")
-    else:
-        # NO SESSION ID FALLBACK - Only use frontend UUID
-        print(f"❌ No frontend kiki_user_client_id found anywhere!")
-        print(f"❌ Session ID available but NOT using it: {session_id}")
-        user_client_id = 'unknown_user'
-    
-    print(f"Final User Client ID: {user_client_id}")
-    
-    # Debug: Let's see what's actually in the request
-    print("=== REQUEST DEBUG ===")
-    print(f"queryResult.queryParams: {req.get('queryResult', {}).get('queryParams', {})}")
-    print(f"originalDetectIntentRequest: {req.get('originalDetectIntentRequest', {})}")
-    print(f"session: {req.get('session', '')}")
-    print("=== END REQUEST DEBUG ===")
 
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
@@ -261,6 +54,15 @@ def webhook():
         parameters = req.get('queryResult', {}).get('parameters', {})
         task = parameters.get('task')  
         date_time_str = parameters.get('date-time') 
+
+        # Extract user_client_id from Dialogflow Messenger payload
+        user_client_id = None
+        if req and isinstance(req, dict):
+            odi = req.get('originalDetectIntentRequest')
+            if odi and isinstance(odi, dict):
+                payload = odi.get('payload')
+                if payload and isinstance(payload, dict):
+                    user_client_id = payload.get('user_client_id')
 
         if not task or not date_time_str:
             print("Missing task or date-time parameter.")
@@ -272,16 +74,19 @@ def webhook():
             reminder_dt_obj = datetime.fromisoformat(date_time_str)
 
             reminder_data = {
-                'user_client_id': user_client_id,  # Add user isolation
                 'task': task,
                 'remind_at': reminder_dt_obj,
                 'status': 'pending',
                 'created_at': firestore.SERVER_TIMESTAMP
             }
-            print(f"About to save reminder with user_client_id: {user_client_id}")
-            doc_ref = db.collection('reminders').add(reminder_data)
-            print(f"Reminder saved to Firestore with ID: {doc_ref[1].id}")
-            print(f"Reminder data: {reminder_data}")
+            # Only add user_client_id if present
+            if user_client_id:
+                reminder_data['user_client_id'] = user_client_id
+            else:
+                print('Warning: user_client_id not found in request payload. Reminder will not be user-specific.')
+
+            db.collection('reminders').add(reminder_data)
+            print(f"Reminder saved to Firestore: {reminder_data}")
 
             user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
 
@@ -316,19 +121,7 @@ def webhook():
             })
 
         try:
-            print(f"Searching for reminders with user_client_id: {user_client_id}, task: {task_to_delete}")
-            
-            # DEBUG: Check ALL reminders in database to see user isolation
-            all_reminders = db.collection('reminders').limit(20).get()
-            print(f"=== DATABASE DEBUG ===")
-            print(f"Total reminders in database: {len(all_reminders)}")
-            for doc in all_reminders:
-                data = doc.to_dict()
-                print(f"Reminder {doc.id}: user_client_id='{data.get('user_client_id', 'MISSING')}', task='{data.get('task')}', status='{data.get('status')}'")
-            print("=== END DATABASE DEBUG ===")
-            
             query = db.collection('reminders') \
-                      .where('user_client_id', '==', user_client_id) \
                       .where('task', '==', task_to_delete) \
                       .where('status', '==', 'pending') \
                       .order_by('remind_at') # Always order by time
@@ -379,7 +172,6 @@ def webhook():
             else:
                 # No specific time provided, list multiple if found
                 docs = query.limit(5).get() # Limit to a reasonable number of results
-                print(f"Found {len(docs)} reminders for user {user_client_id}")
 
                 for doc in docs:
                     data = doc.to_dict()
@@ -514,7 +306,6 @@ def webhook():
         try:
             # Base query for pending tasks, ordered by time
             query = db.collection('reminders') \
-                      .where('user_client_id', '==', user_client_id) \
                       .where('task', '==', task_to_update) \
                       .where('status', '==', 'pending') \
                       .order_by('remind_at') 
@@ -835,126 +626,6 @@ def webhook():
     # Fallback if no specific intent is matched
     return jsonify({
         "fulfillmentText": "I'm not sure how to respond to that yet. Please ask me about setting, deleting, or updating a reminder!"
-    })
-
-# Custom endpoint to receive kiki_user_client_id directly from frontend
-@app.route('/set-user-id', methods=['POST'])
-def set_user_id():
-    """Endpoint to set kiki_user_client_id for the current session"""
-    try:
-        data = request.get_json()
-        kiki_user_client_id = data.get('kiki_user_client_id')
-        session_id = data.get('session_id')
-        
-        if not kiki_user_client_id or not session_id:
-            return jsonify({'error': 'Missing kiki_user_client_id or session_id'}), 400
-        
-        # Store the mapping in the global variable
-        global user_mappings
-        user_mappings[session_id] = kiki_user_client_id
-        print(f"✅ Stored kiki user mapping: {session_id} -> {kiki_user_client_id}")
-        
-        return jsonify({'success': True, 'message': 'Kiki User ID stored successfully'})
-        
-    except Exception as e:
-        print(f"Error in set-user-id: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# Simple test endpoint
-@app.route('/test', methods=['GET'])
-def test():
-    """Simple test endpoint to verify the webhook is running"""
-    return jsonify({'status': 'ok', 'message': 'Webhook is running'})
-
-# Custom webhook endpoint with user ID in URL
-@app.route('/webhook/<user_id>', methods=['POST'])
-def webhook_with_user_id(user_id):
-    """Webhook endpoint with user ID embedded in URL"""
-    req = request.get_json(silent=True, force=True)
-    print(f"Dialogflow Request with User ID: {req}")
-    print(f"User ID from URL: {user_id}")
-
-    # Add null safety for request
-    if not req:
-        print("Error: Request is None")
-        return jsonify({
-            "fulfillmentText": "I'm sorry, there was an error processing your request. Please try again."
-        })
-
-    # Migrate old reminders (run once per request to clean up old data)
-    migrate_old_reminders()
-    
-    # Use the user ID from the URL
-    user_client_id = user_id
-    print(f"Using User Client ID from URL: {user_client_id}")
-    
-    # Now process the request using the same logic as the main webhook
-    # but with the user_id from the URL
-    return process_webhook_request(req, user_client_id)
-
-def process_webhook_request(req, user_client_id):
-    """Process webhook request with the given user_client_id"""
-    # This function contains all the webhook logic from the main webhook function
-    # but uses the provided user_client_id instead of extracting it
-    
-    intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
-    print(f"Intent Display Name: {intent_display_name}")
-    
-    # Handle set.reminder intent
-    if intent_display_name == 'set.reminder':
-        parameters = req.get('queryResult', {}).get('parameters', {})
-        task = parameters.get('task')
-        date_time_str = parameters.get('date-time')
-        
-        if not task:
-            return jsonify({
-                "fulfillmentText": "I'm sorry, I didn't catch what you want to be reminded about. Please tell me the task again."
-            })
-        
-        if not date_time_str:
-            return jsonify({
-                "fulfillmentText": "I'm sorry, I didn't catch when you want to be reminded. Please tell me the time again."
-            })
-        
-        try:
-            # Parse the date-time string
-            dt_obj = datetime.fromisoformat(date_time_str)
-            
-            # Save to Firestore
-            reminder_data = {
-                'user_client_id': user_client_id,
-                'task': task,
-                'remind_at': dt_obj,
-                'status': 'pending',
-                'created_at': firestore.SERVER_TIMESTAMP
-            }
-            
-            print(f"About to save reminder with user_client_id: {user_client_id}")
-            doc_ref = db.collection('reminders').add(reminder_data)
-            print(f"Reminder saved to Firestore with ID: {doc_ref[1].id}")
-            print(f"Reminder data: {reminder_data}")
-            
-            # Format the time for user-friendly display
-            user_friendly_time_str = dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-            
-            return jsonify({
-                "fulfillmentText": f"Perfect! I've set a reminder for you to '{task}' at {user_friendly_time_str}."
-            })
-            
-        except ValueError as e:
-            print(f"Date parsing error: {e}")
-            return jsonify({
-                "fulfillmentText": "I had trouble understanding the time you specified. Please try again with a clear time, like 'tomorrow at 3pm' or 'next Friday at 10am'."
-            })
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
-            return jsonify({
-                "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
-            })
-    
-    # For now, return a simple response for other intents
-    return jsonify({
-        "fulfillmentText": f"Intent '{intent_display_name}' received for user {user_client_id}. This endpoint is still being developed."
     })
 
 if __name__ == '__main__':
