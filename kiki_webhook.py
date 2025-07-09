@@ -61,6 +61,8 @@ def webhook():
     if intent_display_name == 'set.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
         task = parameters.get('task')
+        if isinstance(task, list):
+            task = task[0] if task else None
         if task:
             task = task.strip().lower()
         GENERIC_TASKS = {"set a reminder", "reminder", "remind me", "remind", "add reminder"}
@@ -240,20 +242,39 @@ def webhook():
                     }
                     return jsonify(response)
                 elif len(found_reminders) > 1:
-                    reminder_list_text = f"I found several reminders to '{task_to_delete}':<br><br>"
                     clarification_reminders_data = []
+                    rich_content_items = []
                     for i, reminder in enumerate(found_reminders):
-                        reminder_list_text += f"{i+1}. {reminder['task'].capitalize()} at {reminder['remind_at']}<br><br>"
+                        rich_content_items.append({
+                            "type": "info",
+                            "title": f"{i+1}. {reminder['task'].capitalize()}",
+                            "subtitle": f"at {reminder['remind_at']}",
+                            "event": {
+                                "name": "",
+                                "languageCode": "",
+                                "parameters": {}
+                            }
+                        })
                         clarification_reminders_data.append({
                             'id': reminder['id'],
                             'task': reminder['task'],
                             'time': reminder['remind_at'],
                             'time_raw': reminder['remind_at_raw']
                         })
-                    reminder_list_text += "Please reply with the number, like “1” or “2”."
+                    # Add prompt as a description card
+                    rich_content_items.append({
+                        "type": "description",
+                        "text": ["Please reply with the number, like “1” or “2”."]
+                    })
                     session_id = req['session']
                     response = {
-                        "fulfillmentText": reminder_list_text,
+                        "fulfillmentMessages": [
+                            {
+                                "payload": {
+                                    "richContent": [rich_content_items]
+                                }
+                            }
+                        ],
                         "outputContexts": [
                             {
                                 "name": f"{session_id}/contexts/awaiting_deletion_selection",
