@@ -55,15 +55,6 @@ def webhook():
         task = parameters.get('task')  
         date_time_str = parameters.get('date-time') 
 
-        # Extract user_client_id from Dialogflow Messenger payload
-        user_client_id = None
-        if req and isinstance(req, dict):
-            odi = req.get('originalDetectIntentRequest')
-            if odi and isinstance(odi, dict):
-                payload = odi.get('payload')
-                if payload and isinstance(payload, dict):
-                    user_client_id = payload.get('user_client_id')
-
         if not task or not date_time_str:
             print("Missing task or date-time parameter.")
             return jsonify({
@@ -79,12 +70,6 @@ def webhook():
                 'status': 'pending',
                 'created_at': firestore.SERVER_TIMESTAMP
             }
-            # Only add user_client_id if present
-            if user_client_id:
-                reminder_data['user_client_id'] = user_client_id
-            else:
-                print('Warning: user_client_id not found in request payload. Reminder will not be user-specific.')
-
             db.collection('reminders').add(reminder_data)
             print(f"Reminder saved to Firestore: {reminder_data}")
 
