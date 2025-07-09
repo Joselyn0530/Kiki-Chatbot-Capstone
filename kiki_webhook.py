@@ -251,7 +251,7 @@ def webhook():
                         "fulfillmentText": reminder_list_text,
                         "outputContexts": [
                             {
-                                "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                                "name": f"{session_id}/contexts/awaiting_deletion_selection",
                                 "lifespanCount": 2,
                                 "parameters": {
                                     "reminders_list": json.dumps(clarification_reminders_data),
@@ -591,7 +591,7 @@ def webhook():
         session_id = req['session']
         awaiting_selection_context = None
         for context in req.get('queryResult', {}).get('inputContexts', []):
-            if 'awaiting_reminder_selection' in context.get('name', ''):
+            if 'awaiting_deletion_selection' in context.get('name', ''):
                 awaiting_selection_context = context
                 break
         
@@ -600,9 +600,9 @@ def webhook():
                 "fulfillmentText": "I'm sorry, I'm not sure which list of reminders you're referring to. Please try again from the beginning."
             })
 
-        reminders_list_json = get_context_parameter(req, 'awaiting_reminder_selection', 'reminders_list')
-        action_type = get_context_parameter(req, 'awaiting_reminder_selection', 'action_type')
-        new_time_iso_str_for_update = get_context_parameter(req, 'awaiting_reminder_selection', 'new_time_iso_str_for_update') # Only present for update action
+        reminders_list_json = get_context_parameter(req, 'awaiting_deletion_selection', 'reminders_list')
+        action_type = get_context_parameter(req, 'awaiting_deletion_selection', 'action_type')
+        new_time_iso_str_for_update = get_context_parameter(req, 'awaiting_deletion_selection', 'new_time_iso_str_for_update') # Only present for update action
 
         if not reminders_list_json:
             return jsonify({
@@ -648,7 +648,7 @@ def webhook():
                     "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. Confirm delete?",
                     "outputContexts": [
                         {
-                            "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                            "name": f"{session_id}/contexts/awaiting_deletion_selection",
                             "lifespanCount": 0 # Clear the selection context
                         },
                         {
@@ -673,7 +673,7 @@ def webhook():
                     "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {selected_reminder['time']} to {new_time_formatted}. Confirm update?",
                     "outputContexts": [
                         {
-                            "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                            "name": f"{session_id}/contexts/awaiting_deletion_selection",
                             "lifespanCount": 0 # Clear the selection context
                         },
                         {
