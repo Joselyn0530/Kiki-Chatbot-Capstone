@@ -186,26 +186,6 @@ def webhook():
                     session_id = req['session']
                     response = {
                         "fulfillmentText": f"I found your reminder to '{reminder_data['task']}' at {actual_user_friendly_time_str}. Do you want me to delete it?",
-                        "payload": {
-                            "richContent": [[
-                                {
-                                    "type": "description",
-                                    "title": "Delete this reminder?",
-                                    "text": [f"{reminder_data['task'].capitalize()} at {actual_user_friendly_time_str}"]
-                                },
-                                {
-                                    "type": "button",
-                                    "icon": { "type": "chevron_right", "color": "#FF9800" },
-                                    "text": "Yes, delete it",
-                                    "event": { "name": "delete.reminder - yes" }
-                                },
-                                {
-                                    "type": "button",
-                                    "text": "No, keep it",
-                                    "event": { "name": "delete.reminder - no" }
-                                }
-                            ]]
-                        },
                         "outputContexts": [
                             {
                                 "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
@@ -240,26 +220,6 @@ def webhook():
                     session_id = req['session']
                     response = {
                         "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {reminder['remind_at']}. Do you want me to delete it?",
-                        "payload": {
-                            "richContent": [[
-                                {
-                                    "type": "description",
-                                    "title": "Delete this reminder?",
-                                    "text": [f"{reminder['task'].capitalize()} at {reminder['remind_at']}"]
-                                },
-                                {
-                                    "type": "button",
-                                    "icon": { "type": "chevron_right", "color": "#FF9800" },
-                                    "text": "Yes, delete it",
-                                    "event": { "name": "delete.reminder - yes" }
-                                },
-                                {
-                                    "type": "button",
-                                    "text": "No, keep it",
-                                    "event": { "name": "delete.reminder - no" }
-                                }
-                            ]]
-                        },
                         "outputContexts": [
                             {
                                 "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
@@ -285,7 +245,7 @@ def webhook():
                             'time': reminder['remind_at'],
                             'time_raw': reminder['remind_at_raw']
                         })
-                    reminder_list_text += "Please reply with the number, like “1” or “2”."
+                    reminder_list_text += "\nPlease reply with the number, like “1” or “2”."
                     session_id = req['session']
                     response = {
                         "fulfillmentText": reminder_list_text,
@@ -312,14 +272,14 @@ def webhook():
             })
 
     # Handle selection by index for deletion
-    elif intent_display_name == 'select.reminder_to_delete':
+    elif intent_display_name == 'select.reminder_to_manage':
         parameters = req.get('queryResult', {}).get('parameters', {})
         selection_index = parameters.get('selection_index')
         session_id = req['session']
         # Get reminders list from context
         reminders_list_json = None
         for context in req.get('queryResult', {}).get('outputContexts', []):
-            if 'awaiting_reminder_selection' in context.get('name', ''):
+            if 'awaiting_deletion_selection' in context.get('name', ''):
                 reminders_list_json = context.get('parameters', {}).get('reminders_list')
                 break
         if not reminders_list_json:
@@ -338,26 +298,6 @@ def webhook():
             selected_reminder = reminders_list[selection_index - 1]
             response = {
                 "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. Confirm delete?",
-                "payload": {
-                    "richContent": [[
-                        {
-                            "type": "description",
-                            "title": "Delete this reminder?",
-                            "text": [f"{selected_reminder['task'].capitalize()} at {selected_reminder['time']}"]
-                        },
-                        {
-                            "type": "button",
-                            "icon": { "type": "chevron_right", "color": "#FF9800" },
-                            "text": "Yes, delete it",
-                            "event": { "name": "delete.reminder - yes" }
-                        },
-                        {
-                            "type": "button",
-                            "text": "No, keep it",
-                            "event": { "name": "delete.reminder - no" }
-                        }
-                    ]]
-                },
                 "outputContexts": [
                     {
                         "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
@@ -706,26 +646,6 @@ def webhook():
             if action_type == "delete":
                 response = {
                     "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. Confirm delete?",
-                    "payload": {
-                        "richContent": [[
-                            {
-                                "type": "description",
-                                "title": "Delete this reminder?",
-                                "text": [f"{selected_reminder['task'].capitalize()} at {selected_reminder['time']}"]
-                            },
-                            {
-                                "type": "button",
-                                "icon": { "type": "chevron_right", "color": "#FF9800" },
-                                "text": "Yes, delete it",
-                                "event": { "name": "delete.reminder - yes" }
-                            },
-                            {
-                                "type": "button",
-                                "text": "No, keep it",
-                                "event": { "name": "delete.reminder - no" }
-                            }
-                        ]]
-                    },
                     "outputContexts": [
                         {
                             "name": f"{session_id}/contexts/awaiting_reminder_selection",
@@ -751,26 +671,6 @@ def webhook():
 
                 response = {
                     "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {selected_reminder['time']} to {new_time_formatted}. Confirm update?",
-                    "payload": {
-                        "richContent": [[
-                            {
-                                "type": "description",
-                                "title": "Update this reminder?",
-                                "text": [f"{selected_reminder['task'].capitalize()} at {selected_reminder['time']}"]
-                            },
-                            {
-                                "type": "button",
-                                "icon": { "type": "chevron_right", "color": "#FF9800" },
-                                "text": "Yes, update it",
-                                "event": { "name": "update.reminder - yes" }
-                            },
-                            {
-                                "type": "button",
-                                "text": "No, keep it",
-                                "event": { "name": "update.reminder - no" }
-                            }
-                        ]]
-                    },
                     "outputContexts": [
                         {
                             "name": f"{session_id}/contexts/awaiting_reminder_selection",
