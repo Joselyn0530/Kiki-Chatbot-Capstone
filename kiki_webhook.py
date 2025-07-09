@@ -707,6 +707,10 @@ def webhook():
         parameters = req.get('queryResult', {}).get('parameters', {})
         task = parameters.get('task')
 
+        # Handle task as a list
+        if isinstance(task, list):
+            task = task[0] if task else None
+
         # Get time from context
         context_list = req.get('queryResult', {}).get('outputContexts', [])
         date_time_str = None
@@ -714,7 +718,7 @@ def webhook():
             if 'await_task' in context.get('name', ''):
                 date_time_str = context.get('parameters', {}).get('date-time')
 
-        if task and date_time_str:
+        if task and date_time_str and date_time_str.strip():
             try:
                 reminder_dt_obj = datetime.fromisoformat(date_time_str)
                 reminder_data = {
@@ -734,9 +738,14 @@ def webhook():
                     "fulfillmentText": "Sorry, I couldn't save your reminder. Please try again."
                 })
         else:
-            return jsonify({
-                "fulfillmentText": "Oops! I need both the task and the time. Could you try again?"
-            })
+            if task and (not date_time_str or not date_time_str.strip()):
+                return jsonify({
+                    "fulfillmentText": f"Great! What time should I remind you to {task}?"
+                })
+            else:
+                return jsonify({
+                    "fulfillmentText": "Oops! I need both the task and the time. Could you try again?"
+                })
 
     # Fallback if no specific intent is matched
     return jsonify({
