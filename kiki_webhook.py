@@ -63,6 +63,11 @@ def webhook():
         task = parameters.get('task')
         if task:
             task = task.strip().lower()
+        GENERIC_TASKS = {"set a reminder", "reminder", "remind me", "remind", "add reminder"}
+        if task and task in GENERIC_TASKS:
+            return jsonify({
+                "fulfillmentText": "Sure! ☺️ What should I remind you about?"
+            })
         date_time_str = parameters.get('date-time')
 
         # Improved missing parameter handling
@@ -153,7 +158,7 @@ def webhook():
 
         if not task_to_delete:
             return jsonify({
-                "fulfillmentText": "To delete a reminder, please tell me the task, e.g., 'delete my bath reminder'."
+                "fulfillmentText": "To delete a reminder, please tell me the task, e.g., 'delete bath reminder'."
             })
 
         try:
@@ -235,10 +240,10 @@ def webhook():
                     }
                     return jsonify(response)
                 elif len(found_reminders) > 1:
-                    reminder_list_text = f"I found several reminders to '{task_to_delete}':\n\n"
+                    reminder_list_text = f"I found several reminders to '{task_to_delete}':<br><br>"
                     clarification_reminders_data = []
                     for i, reminder in enumerate(found_reminders):
-                        reminder_list_text += f"{i+1}. {reminder['task'].capitalize()} at {reminder['remind_at']}\n\n"
+                        reminder_list_text += f"{i+1}. {reminder['task'].capitalize()} at {reminder['remind_at']}<br><br>"
                         clarification_reminders_data.append({
                             'id': reminder['id'],
                             'task': reminder['task'],
@@ -297,7 +302,7 @@ def webhook():
         if selection_index is not None and 1 <= selection_index <= len(reminders_list):
             selected_reminder = reminders_list[selection_index - 1]
             response = {
-                "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. Confirm delete?",
+                "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. Confirm delete it?",
                 "outputContexts": [
                     {
                         "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
@@ -477,11 +482,11 @@ def webhook():
 
                 elif len(found_reminders) > 1:
                     # Multiple reminders found, ask user to clarify
-                    reminder_list_text = "I found a few reminders to '{task_to_update}':\n".format(task_to_update=task_to_update)
+                    reminder_list_text = "I found a few reminders to '{task_to_update}':<br><br>".format(task_to_update=task_to_update)
                     clarification_reminders_data = [] # To store in context
 
                     for i, reminder in enumerate(found_reminders):
-                        reminder_list_text += f"{i+1}. at {reminder['remind_at']}\n"
+                        reminder_list_text += f"{i+1}. at {reminder['remind_at']}<br><br>"
                         clarification_reminders_data.append({
                             'id': reminder['id'],
                             'task': reminder['task'],
