@@ -43,6 +43,12 @@ def get_context_parameter(req_payload, context_name_part, param_name):
                 return context['parameters'][param_name]
     return None
 
+# Helper to extract date-time string from dict or return as-is
+def extract_datetime_str(dt):
+    if isinstance(dt, dict) and 'date_time' in dt:
+        return dt['date_time']
+    return dt
+
 @app.route('/', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
@@ -64,11 +70,7 @@ def webhook():
         elif not task and date_time_str:
             # Format the time for user-friendly display
             try:
-                # Handle dict or string
-                if isinstance(date_time_str, dict) and 'date_time' in date_time_str:
-                    dt_str = date_time_str['date_time']
-                else:
-                    dt_str = date_time_str
+                dt_str = extract_datetime_str(date_time_str)
                 dt_obj = datetime.fromisoformat(dt_str)
                 user_friendly_time_str = dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
             except Exception:
@@ -693,13 +695,9 @@ def webhook():
         if isinstance(task, list):
             task = task[0] if task else None
 
-        # Handle Dialogflow's date-time as dict or string
-        if isinstance(date_time, dict) and 'date_time' in date_time:
-            date_time_str = date_time['date_time']
-        else:
-            date_time_str = date_time
+        date_time_str = extract_datetime_str(date_time)
 
-        if task and date_time_str and date_time_str.strip():
+        if task and date_time_str and isinstance(date_time_str, str) and date_time_str.strip():
             try:
                 reminder_dt_obj = datetime.fromisoformat(date_time_str)
                 reminder_data = {
@@ -711,7 +709,17 @@ def webhook():
                 db.collection('reminders').add(reminder_data)
                 user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                 return jsonify({
-                    "fulfillmentText": f"All set! I’ll remind you to {task} at {user_friendly_time_str}. ✅"
+                    "fulfillmentText": f"All set! I’ll remind you to {task} at {user_friendly_time_str}. ✅",
+                    "outputContexts": [
+                        {
+                            "name": f"{req['session']}/contexts/await_task",
+                            "lifespanCount": 0
+                        },
+                        {
+                            "name": f"{req['session']}/contexts/await_time",
+                            "lifespanCount": 0
+                        }
+                    ]
                 })
             except Exception as e:
                 print(f"Error saving reminder in CaptureTimeIntent: {e}")
@@ -734,12 +742,13 @@ def webhook():
 
         # Get time from context
         context_list = req.get('queryResult', {}).get('outputContexts', [])
-        date_time_str = None
+        date_time = None
         for context in context_list:
             if 'await_task' in context.get('name', ''):
-                date_time_str = context.get('parameters', {}).get('date-time')
+                date_time = context.get('parameters', {}).get('date-time')
+        date_time_str = extract_datetime_str(date_time)
 
-        if task and date_time_str and date_time_str.strip():
+        if task and date_time_str and isinstance(date_time_str, str) and date_time_str.strip():
             try:
                 reminder_dt_obj = datetime.fromisoformat(date_time_str)
                 reminder_data = {
@@ -751,7 +760,17 @@ def webhook():
                 db.collection('reminders').add(reminder_data)
                 user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                 return jsonify({
-                    "fulfillmentText": f"All set! ✅ I’ll remind you to {task} at {user_friendly_time_str}."
+                    "fulfillmentText": f"All set! ✅ I’ll remind you to {task} at {user_friendly_time_str}.",
+                    "outputContexts": [
+                        {
+                            "name": f"{req['session']}/contexts/await_task",
+                            "lifespanCount": 0
+                        },
+                        {
+                            "name": f"{req['session']}/contexts/await_time",
+                            "lifespanCount": 0
+                        }
+                    ]
                 })
             except Exception as e:
                 print(f"Error saving reminder in CaptureTaskIntent: {e}")
@@ -759,7 +778,7 @@ def webhook():
                     "fulfillmentText": "Sorry, I couldn't save your reminder. Please try again."
                 })
         else:
-            if task and (not date_time_str or not date_time_str.strip()):
+            if task and (not date_time_str or not (isinstance(date_time_str, str) and date_time_str.strip())):
                 return jsonify({
                     "fulfillmentText": f"Great! What time should I remind you to {task}?"
                 })
