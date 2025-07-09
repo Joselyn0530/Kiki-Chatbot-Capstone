@@ -79,12 +79,16 @@ def webhook():
                 "outputContexts": [
                     {
                         "name": f"{req['session']}/contexts/await_task",
-                        "lifespanCount": 5,
+                        "lifespanCount": 2,
                         "parameters": {
                             "date-time": date_time_str
                         }
                     }
                 ]
+            })
+        elif not task and not date_time_str:
+            return jsonify({
+                "fulfillmentText": "Sure! 😊 What should I remind you about?"
             })
         elif not date_time_str:
             # Save task to context and ask for time
@@ -93,7 +97,7 @@ def webhook():
                 "outputContexts": [
                     {
                         "name": f"{req['session']}/contexts/await_time",
-                        "lifespanCount": 5,
+                        "lifespanCount": 2,
                         "parameters": {
                             "task": task
                         }
@@ -117,7 +121,7 @@ def webhook():
 
                 response = {
                     "fulfillmentMessages": [
-                        {"text": {"text": [f"Got it! I'll remind you to '{task}' at {user_friendly_time_str}."]}
+                        {"text": {"text": [f"Got it! I'll remind you to {task} at {user_friendly_time_str}."]}
                         }
                     ]
                 }
