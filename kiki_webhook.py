@@ -48,7 +48,11 @@ def get_context_parameter(req_payload, context_name_part, param_name):
 def extract_datetime_str(dt):
     if isinstance(dt, dict) and 'date_time' in dt:
         return dt['date_time']
-    return dt
+    if isinstance(dt, str):
+        return dt
+    if dt is not None:
+        return str(dt)
+    return ''
 
 @app.route('/', methods=['POST'])
 def webhook():
@@ -58,7 +62,47 @@ def webhook():
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
 
-    if intent_display_name == 'set.reminder':
+    # --- REMINDER INTENTS ---
+    if intent_display_name == 'remind.reminder_task_time':
+        # Intent 1: One-shot, both task and time provided
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        task = parameters.get('task')
+        if isinstance(task, list):
+            task = task[0] if task else None
+        if task:
+            task = task.strip().lower()
+        date_time_str = extract_datetime_str(parameters.get('date-time'))
+        if not task or not date_time_str:
+            return jsonify({
+                "fulfillmentText": "I need both the task and the time. Please say something like 'remind me to take medicine at 8pm'."
+            })
+        try:
+            reminder_dt_obj = datetime.fromisoformat(date_time_str)
+            reminder_data = {
+                'task': task,
+                'remind_at': reminder_dt_obj,
+                'status': 'pending',
+                'created_at': firestore.SERVER_TIMESTAMP
+            }
+            db.collection('reminders').add(reminder_data)
+            user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+            # Clear all reminder-related contexts
+            response = {
+                "fulfillmentText": f"All set! ✅ I’ll remind you to {task} at {user_friendly_time_str}.",
+                "outputContexts": [
+                    {"name": f"{req['session']}/contexts/await_task", "lifespanCount": 0},
+                    {"name": f"{req['session']}/contexts/await_time", "lifespanCount": 0}
+                ]
+            }
+            return jsonify(response)
+        except Exception as e:
+            print(f"Error saving reminder in remind.reminder_task_time: {e}")
+            return jsonify({
+                "fulfillmentText": "Sorry, I couldn't save your reminder. Please try again."
+            })
+
+    elif intent_display_name == 'set.reminder':
+        # Intent 2: Multi-turn, generic entry point
         parameters = req.get('queryResult', {}).get('parameters', {})
         task = parameters.get('task')
         if isinstance(task, list):
@@ -71,20 +115,11 @@ def webhook():
             return jsonify({
                 "fulfillmentText": "Sure! ☺️ What should I remind you about?",
                 "outputContexts": [
-                    {
-                        "name": f"{req['session']}/contexts/await_task",
-                        "lifespanCount": 2,
-                        "parameters": {}
-                    },
-                    {
-                        "name": f"{req['session']}/contexts/await_time",
-                        "lifespanCount": 0,
-                        "parameters": {}
-                    }
+                    {"name": f"{req['session']}/contexts/await_task", "lifespanCount": 2, "parameters": {}},
+                    {"name": f"{req['session']}/contexts/await_time", "lifespanCount": 0, "parameters": {}}
                 ]
             })
-        date_time_str = parameters.get('date-time')
-
+        date_time_str = extract_datetime_str(parameters.get('date-time'))
         # Improved missing parameter handling
         if not task and not date_time_str:
             return jsonify({
@@ -102,37 +137,20 @@ def webhook():
             return jsonify({
                 "fulfillmentText": f"Okay! 🕒 I got the time: {user_friendly_time_str}. What should I remind you about?",
                 "outputContexts": [
-                    {
-                        "name": f"{req['session']}/contexts/await_task",
-                        "lifespanCount": 2,
-                        "parameters": {
-                            "date-time": date_time_str
-                        }
-                    }
+                    {"name": f"{req['session']}/contexts/await_task", "lifespanCount": 2, "parameters": {"date-time": date_time_str}}
                 ]
-            })
-        elif not task and not date_time_str:
-            return jsonify({
-                "fulfillmentText": "Sure! 😊 What should I remind you about?"
             })
         elif not date_time_str:
             # Save task to context and ask for time
             return jsonify({
                 "fulfillmentText": f"Got it — you want me to remind you to {task}. 📝 When should I remind you?",
                 "outputContexts": [
-                    {
-                        "name": f"{req['session']}/contexts/await_time",
-                        "lifespanCount": 2,
-                        "parameters": {
-                            "task": task
-                        }
-                    }
+                    {"name": f"{req['session']}/contexts/await_time", "lifespanCount": 2, "parameters": {"task": task}}
                 ]
             })
         else:
             try:
                 reminder_dt_obj = datetime.fromisoformat(date_time_str)
-
                 reminder_data = {
                     'task': task,
                     'remind_at': reminder_dt_obj,
@@ -141,17 +159,17 @@ def webhook():
                 }
                 db.collection('reminders').add(reminder_data)
                 print(f"Reminder saved to Firestore: {reminder_data}")
-
                 user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-
                 response = {
                     "fulfillmentMessages": [
-                        {"text": {"text": [f"Got it! I'll remind you to {task} at {user_friendly_time_str}."]}
-                        }
+                        {"text": {"text": [f"Got it! I'll remind you to {task} at {user_friendly_time_str}."]}}
+                    ],
+                    "outputContexts": [
+                        {"name": f"{req['session']}/contexts/await_task", "lifespanCount": 0},
+                        {"name": f"{req['session']}/contexts/await_time", "lifespanCount": 0}
                     ]
                 }
                 return jsonify(response)
-
             except ValueError as e:
                 print(f"Date parsing error: {e}")
                 return jsonify({
@@ -162,6 +180,7 @@ def webhook():
                 return jsonify({
                     "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
                 })
+    # --- END REMINDER INTENTS ---
 
     # Handle delete.reminder intent (initial request to find and confirm)
     elif intent_display_name == 'delete.reminder':
