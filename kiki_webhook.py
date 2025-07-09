@@ -157,16 +157,57 @@ def webhook():
     user_client_id = get_user_client_id(req)
     print(f"Final User Client ID: {user_client_id}")
     
-    # TEMPORARY FIX: If we're using session ID, create a more persistent identifier
-    if user_client_id.startswith('dfMessenger-'):
-        # Create a hash-based user ID that's more persistent
-        import hashlib
-        session_hash = hashlib.md5(user_client_id.encode()).hexdigest()[:16]
-        persistent_user_id = f"user_{session_hash}"
-        print(f"⚠️ Converting session ID to persistent ID: {user_client_id} -> {persistent_user_id}")
-        user_client_id = persistent_user_id
-    else:
+    # FORCE USE OF FRONTEND USER_CLIENT_ID
+    # Since Dialogflow is not passing the frontend user_client_id, we need to extract it differently
+    print("=== FORCING FRONTEND USER_CLIENT_ID EXTRACTION ===")
+    
+    # Try to get the frontend user_client_id from multiple locations
+    frontend_user_id = None
+    
+    # Method 1: Check if it's in the request headers
+    if request.headers.get('X-User-Client-ID'):
+        frontend_user_id = request.headers.get('X-User-Client-ID')
+        print(f"✅ Found user_client_id in headers: {frontend_user_id}")
+    
+    # Method 2: Check if it's in the request body as a custom field
+    elif req.get('user_client_id'):
+        frontend_user_id = req.get('user_client_id')
+        print(f"✅ Found user_client_id in request body: {frontend_user_id}")
+    
+    # Method 3: Check if it's in the originalDetectIntentRequest
+    elif req.get('originalDetectIntentRequest', {}).get('user_client_id'):
+        frontend_user_id = req.get('originalDetectIntentRequest', {}).get('user_client_id')
+        print(f"✅ Found user_client_id in originalDetectIntentRequest: {frontend_user_id}")
+    
+    # Method 4: Check if it's in the queryResult directly
+    elif req.get('queryResult', {}).get('user_client_id'):
+        frontend_user_id = req.get('queryResult', {}).get('user_client_id')
+        print(f"✅ Found user_client_id in queryResult: {frontend_user_id}")
+    
+    # Method 5: Check if it's in queryResult.parameters
+    elif req.get('queryResult', {}).get('parameters', {}).get('user_client_id'):
+        frontend_user_id = req.get('queryResult', {}).get('parameters', {}).get('user_client_id')
+        print(f"✅ Found user_client_id in queryResult.parameters: {frontend_user_id}")
+    
+    # Method 6: Check if it's in queryResult.queryParams.payload
+    elif req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id'):
+        frontend_user_id = req.get('queryResult', {}).get('queryParams', {}).get('payload', {}).get('user_client_id')
+        print(f"✅ Found user_client_id in queryResult.queryParams.payload: {frontend_user_id}")
+    
+    # If we found a frontend user_client_id, use it
+    if frontend_user_id:
+        user_client_id = frontend_user_id
         print(f"✅ Using frontend user_client_id: {user_client_id}")
+    else:
+        # Fallback to session ID with hash conversion
+        if user_client_id.startswith('dfMessenger-'):
+            import hashlib
+            session_hash = hashlib.md5(user_client_id.encode()).hexdigest()[:16]
+            persistent_user_id = f"user_{session_hash}"
+            print(f"⚠️ No frontend user_client_id found, converting session ID: {user_client_id} -> {persistent_user_id}")
+            user_client_id = persistent_user_id
+        else:
+            print(f"⚠️ Using existing user_client_id: {user_client_id}")
     
     # Debug: Let's see what's actually in the request
     print("=== REQUEST DEBUG ===")
