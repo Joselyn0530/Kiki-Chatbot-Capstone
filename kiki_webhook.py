@@ -656,26 +656,30 @@ def webhook():
                                 return jsonify({
                                     "fulfillmentText": f"I couldn't understand the new time '{new_date_time_str}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
                                 })
-
-                        session_id = req['session']
-                        response = {
-                            "fulfillmentText": f"I found your reminder to '{task_to_update}' at {user_friendly_old_time_str}. Do you want to change it to {user_friendly_new_time_str}?",
-                            "outputContexts": [
-                                {
-                                    "name": f"{session_id}/contexts/awaiting_update_confirmation",
-                                    "lifespanCount": 2, 
-                                    "parameters": {
-                                        "reminder_id_to_update": reminder_id,
-                                        "reminder_task_found": task_to_update,
-                                        "reminder_old_time_found": user_friendly_old_time_str, 
-                                        "reminder_new_time_desired_iso_str": new_date_time_str,
-                                        "reminder_new_time_desired_formatted": user_friendly_new_time_str
+                            session_id = req['session']
+                            response = {
+                                "fulfillmentText": f"I found your reminder to '{task_to_update}' at {user_friendly_old_time_str}. Do you want to change it to {user_friendly_new_time_str}?",
+                                "outputContexts": [
+                                    {
+                                        "name": f"{session_id}/contexts/awaiting_update_confirmation",
+                                        "lifespanCount": 2, 
+                                        "parameters": {
+                                            "reminder_id_to_update": reminder_id,
+                                            "reminder_task_found": task_to_update,
+                                            "reminder_old_time_found": user_friendly_old_time_str, 
+                                            "reminder_new_time_desired_iso_str": new_date_time_str,
+                                            "reminder_new_time_desired_formatted": user_friendly_new_time_str
+                                        }
                                     }
-                                }
-                            ]
-                        }
-                        print(f"Found specific reminder {reminder_id} for update. Awaiting confirmation.")
-                        return jsonify(response)
+                                ]
+                            }
+                            print(f"Found specific reminder {reminder_id} for update. Awaiting confirmation.")
+                            return jsonify(response)
+                        except Exception as e:
+                            print(f"Error parsing new time: {e}")
+                            return jsonify({
+                                "fulfillmentText": f"I couldn't understand the new time '{new_date_time_str}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
+                            })
                     else:
                         try:
                             old_dt_obj = datetime.fromisoformat(old_date_time_str)
