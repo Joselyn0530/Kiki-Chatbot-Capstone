@@ -34,12 +34,12 @@ KUALA_LUMPUR_TZ = pytz.timezone('Asia/Kuala_Lumpur')
 
 # Helper function to get context parameter
 def get_context_parameter(req_payload, context_name_part, param_name):
-    # Corrected: Iterate over inputContexts received from Dialogflow
-    for context in req_payload.get('queryResult', {}).get('inputContexts', []):
-        # Check if the context name matches the part we're looking for
-        # The full context name is like 'projects/kiki-ai-chatbot/locations/global/agent/sessions/xyz/contexts/context_name'
+    for context in req_payload.get('queryResult', {}).get('outputContexts', []):
         if context_name_part in context.get('name', ''):
-            # Check if the parameter exists in this context
+            if param_name in context.get('parameters', {}):
+                return context['parameters'][param_name]
+    for context in req_payload.get('queryResult', {}).get('inputContexts', []):
+        if context_name_part in context.get('name', ''):
             if param_name in context.get('parameters', {}):
                 return context['parameters'][param_name]
     return None
