@@ -409,7 +409,7 @@ def webhook():
     elif intent_display_name == 'delete.reminder - yes':
         reminder_id_to_delete = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_id_to_delete')
         reminder_task_found = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_task_found')
-        reminder_time_found_str = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found')
+        reminder_time_found_str = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found_str')
         reminder_time_found_raw = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found_raw')
         session_id = req['session']
         if reminder_id_to_delete:
@@ -623,7 +623,7 @@ def webhook():
                 if new_date_time_str:
                     user_friendly_new_time_str = user_friendly_time(new_date_time_str)
                     return jsonify({
-                        "fulfillmentText": f"I see you want to change a reminder to {user_friendly_new_time_str}, but I need to know which reminder you want to change. Please tell me the task or the current time of the reminder you want to update.",
+                        "fulfillmentText": f"I see you want to change a reminder to {user_friendly_new_time_str}, but I need to know which reminder you want to change. Please tell me the task or the current time of the reminder you want to update. E.g., 'change sleep reminder' or 'change bath reminder'.",
                         "outputContexts": clear_all_update_contexts(session_id)
                     })
                 else:
@@ -934,7 +934,7 @@ def webhook():
                 user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
             else:
                 return jsonify({
-                    "fulfillmentText": f"I couldn't understand the time '{new_date_time}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
+                    "fulfillmentText": f"I couldn't understand the time you gave. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
                 })
             
             session_id = req['session']
@@ -963,7 +963,7 @@ def webhook():
         except ValueError as e:
             print(f"Error parsing new time: {e}")
             return jsonify({
-                "fulfillmentText": f"I couldn't understand the time '{new_date_time}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
+                "fulfillmentText": f"Sorry, I couldn't understand the time you gave. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
             })
         except Exception as e:
             print(f"Error processing update time: {e}")
