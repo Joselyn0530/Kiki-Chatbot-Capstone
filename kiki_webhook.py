@@ -86,11 +86,20 @@ def get_openai_response(user_message, session_id):
 def is_chat_mode_active(req_payload):
     """
     Check if the user is currently in chat mode by looking for chat_mode context.
+    Checks both input and output contexts to handle all scenarios.
     """
-    contexts = req_payload.get('queryResult', {}).get('inputContexts', [])
-    for context in contexts:
+    # Check input contexts (current active contexts)
+    input_contexts = req_payload.get('queryResult', {}).get('inputContexts', [])
+    for context in input_contexts:
         if 'chat_mode' in context.get('name', ''):
             return True
+    
+    # Check output contexts (contexts being set in this turn)
+    output_contexts = req_payload.get('queryResult', {}).get('outputContexts', [])
+    for context in output_contexts:
+        if 'chat_mode' in context.get('name', '') and context.get('lifespanCount', 0) > 0:
+            return True
+    
     return False
 
 def set_chat_mode_context(session_id, lifespan=5):
@@ -230,8 +239,14 @@ def webhook():
     
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
     elif intent_display_name == 'FallbackDuringChatIntent':
-        if is_chat_mode_active(req):
+        chat_mode_active = is_chat_mode_active(req)
+        print(f"FallbackDuringChatIntent - Chat mode active: {chat_mode_active}")
+        print(f"User message: '{user_message}'")
+        
+        if chat_mode_active:
+            print("Sending to OpenAI...")
             ai_response = get_openai_response(user_message, session_id)
+            print(f"OpenAI response: {ai_response}")
             return jsonify({
                 "fulfillmentText": ai_response,
                 "outputContexts": [set_chat_mode_context(session_id)]
