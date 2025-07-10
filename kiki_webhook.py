@@ -332,7 +332,7 @@ def webhook():
             })
 
     # Handle selection by index for deletion
-    elif intent_display_name == 'select.reminder_to_manage':
+    elif intent_display_name == 'select.reminder_to_manage_delete':
         parameters = req.get('queryResult', {}).get('parameters', {})
         selection_index = parameters.get('selection_index')
         session_id = req['session']
@@ -365,8 +365,7 @@ def webhook():
                         "parameters": {
                             "reminder_id_to_delete": selected_reminder['id'],
                             "reminder_task_found": selected_reminder['task'],
-                            "reminder_time_found_str": selected_reminder['time'],
-                            "reminder_time_found_raw": selected_reminder['time_raw']
+                            "reminder_time_found": selected_reminder['time']
                         }
                     }
                 ]
@@ -871,8 +870,8 @@ def webhook():
                 "fulfillmentText": "I had trouble understanding the time. Please use a clear format like '5pm' or 'tomorrow at 2 PM'."
             })
 
-    # Handle select.reminder_to_manage intent (user clarifies which reminder from a list)
-    elif intent_display_name == 'select.reminder_to_manage':
+    # Handle select.reminder_to_manage_update intent (user clarifies which reminder from a list)
+    elif intent_display_name == 'select.reminder_to_manage_update':
         parameters = req.get('queryResult', {}).get('parameters', {})
         selection_index = parameters.get('selection_index') # e.g., 1, 2, 3
         selection_time_str = parameters.get('selection_time') # e.g., "6pm", "tomorrow"
