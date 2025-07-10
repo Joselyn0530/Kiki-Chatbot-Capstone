@@ -65,6 +65,12 @@ def webhook():
     req = request.get_json(silent=True, force=True)
     print(f"Dialogflow Request: {req}")
 
+    # Debug: Print all input and output contexts for every request
+    input_contexts = req.get('queryResult', {}).get('inputContexts', [])
+    output_contexts = req.get('queryResult', {}).get('outputContexts', [])
+    print("Input Contexts:", input_contexts)
+    print("Output Contexts:", output_contexts)
+
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
 
@@ -883,6 +889,7 @@ def webhook():
 
     # Handle select.reminder_to_manage_update intent (user clarifies which reminder from a list)
     elif intent_display_name == 'select.reminder_to_manage_update':
+        print("[DEBUG] Entered select.reminder_to_manage_update handler")
         parameters = req.get('queryResult', {}).get('parameters', {})
         selection_index = parameters.get('selection_index') # e.g., 1, 2, 3
         selection_time_str = parameters.get('selection_time') # e.g., "6pm", "tomorrow"
@@ -890,6 +897,8 @@ def webhook():
         session_id = req['session']
         awaiting_selection_context = None
         context_name = None
+        # Debug: Print inputContexts again for this handler
+        print("[DEBUG] inputContexts in select.reminder_to_manage_update:", req.get('queryResult', {}).get('inputContexts', []))
         
         # Check for both deletion and update selection contexts
         for context in req.get('queryResult', {}).get('inputContexts', []):
