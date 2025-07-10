@@ -677,12 +677,17 @@ def webhook():
                         print(f"Found specific reminder {reminder_id} for update. Awaiting confirmation.")
                         return jsonify(response)
                     else:
-                        # No specific reminder found with provided old time
-                        old_dt_obj = datetime.fromisoformat(old_date_time_str)
-                        user_friendly_old_time_str = old_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                        return jsonify({
-                            "fulfillmentText": f"I couldn't find a pending reminder to '{task_to_update}' at {user_friendly_old_time_str}. Please make sure the task and current time are correct."
-                        })
+                        try:
+                            old_dt_obj = datetime.fromisoformat(old_date_time_str)
+                            user_friendly_old_time_str = old_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                            return jsonify({
+                                "fulfillmentText": f"I couldn't find a pending reminder to '{task_to_update}' at {user_friendly_old_time_str}. Please make sure the task and current time are correct."
+                            })
+                        except Exception as e:
+                            print(f"Unexpected error in old_date_time_str parsing (task-specific, branch 3): {e}")
+                            return jsonify({
+                                "fulfillmentText": "Sorry, something went wrong while processing your request. Please try again."
+                            })
                 except ValueError as e:
                     print(f"Error parsing old date time: {e}")
                     return jsonify({
