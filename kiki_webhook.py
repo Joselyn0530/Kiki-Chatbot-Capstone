@@ -56,7 +56,7 @@ def clear_all_update_contexts(session_id):
         {"name": f"{session_id}/contexts/awaiting_deletion_confirmation", "lifespanCount": 0},
         {"name": f"{session_id}/contexts/awaiting_update_confirmation", "lifespanCount": 0},
         {"name": f"{session_id}/contexts/awaiting_update_time", "lifespanCount": 0},
-        {"name": f"{session_id}/contexts/awaiting_reminder_selection", "lifespanCount": 0},
+        {"name": f"{session_id}/contexts/awaiting_update_selection", "lifespanCount": 0},
         {"name": f"{session_id}/contexts/awaiting_deletion_selection", "lifespanCount": 0}
     ]
 
@@ -552,7 +552,7 @@ def webhook():
                             "fulfillmentText": reminder_list_text,
                             "outputContexts": [
                                 {
-                                    "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                                    "name": f"{session_id}/contexts/awaiting_update_selection",
                                     "lifespanCount": 2,
                                     "parameters": {
                                         "reminders_list": json.dumps(clarification_reminders_data),
@@ -752,7 +752,7 @@ def webhook():
                     ],
                     "outputContexts": [
                         {
-                            "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                            "name": f"{session_id}/contexts/awaiting_update_selection",
                             "lifespanCount": 2,
                             "parameters": {
                                 "reminders_list": json.dumps(clarification_reminders_data),
@@ -906,9 +906,9 @@ def webhook():
                 awaiting_selection_context = context
                 context_name = 'awaiting_deletion_selection'
                 break
-            elif 'awaiting_reminder_selection' in context.get('name', ''):
+            elif 'awaiting_update_selection' in context.get('name', ''):
                 awaiting_selection_context = context
-                context_name = 'awaiting_reminder_selection'
+                context_name = 'awaiting_update_selection'
                 break
         
         if not awaiting_selection_context:
