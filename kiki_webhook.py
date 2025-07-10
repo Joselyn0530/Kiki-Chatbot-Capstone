@@ -47,15 +47,17 @@ def get_context_parameter(req_payload, context_name_part, param_name):
 # Helper to extract date-time string from dict or return as-is
 def extract_datetime_str(dt):
     if isinstance(dt, dict) and 'date_time' in dt:
-        return dt['date_time']
-    return dt
+        return str(dt['date_time'])
+    return str(dt) if dt is not None else ''
 
 # Helper to clear all update-related contexts
 def clear_all_update_contexts(session_id):
     return [
+        {"name": f"{session_id}/contexts/awaiting_deletion_confirmation", "lifespanCount": 0},
         {"name": f"{session_id}/contexts/awaiting_update_confirmation", "lifespanCount": 0},
         {"name": f"{session_id}/contexts/awaiting_update_time", "lifespanCount": 0},
-        {"name": f"{session_id}/contexts/awaiting_reminder_selection", "lifespanCount": 0}
+        {"name": f"{session_id}/contexts/awaiting_reminder_selection", "lifespanCount": 0},
+        {"name": f"{session_id}/contexts/awaiting_deletion_selection", "lifespanCount": 0}
     ]
 
 @app.route('/', methods=['POST'])
@@ -426,7 +428,6 @@ def webhook():
             ] + clear_all_update_contexts(session_id)
         })
 
-
     # Handle update.reminder intent (initial request to find and ask for confirmation)
     elif intent_display_name == 'update.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
@@ -549,7 +550,7 @@ def webhook():
                                     "lifespanCount": 2,
                                     "parameters": {
                                         "reminders_list": json.dumps(clarification_reminders_data),
-                                        "action_type": "update_no_time"
+                                        "action_type": "update_no_time" # New action type
                                     }
                                 }
                             ]
@@ -749,7 +750,7 @@ def webhook():
                             "lifespanCount": 2,
                             "parameters": {
                                 "reminders_list": json.dumps(clarification_reminders_data),
-                                "action_type": "update_no_time"
+                                "action_type": "update_no_time" # New action type
                             }
                         }
                     ]
@@ -773,22 +774,32 @@ def webhook():
         reminder_task_found = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_task_found')
         reminder_new_time_desired_iso_str = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_new_time_desired_iso_str')
         reminder_new_time_desired_formatted = get_context_parameter(req, 'awaiting_update_confirmation', 'reminder_new_time_desired_formatted')
-
+        
         if reminder_id_to_update and reminder_new_time_desired_iso_str:
             try:
                 new_dt_obj_for_update = datetime.fromisoformat(reminder_new_time_desired_iso_str)
+                
+                doc_ref = db.collection('reminders').document(reminder_id_to_update)
+                doc = doc_ref.get()
 
-                db.collection('reminders').document(reminder_id_to_update).update({
-                    'remind_at': new_dt_obj_for_update
-                })
-                print(f"Reminder (ID: {reminder_id_to_update}) confirmed and updated to {new_dt_obj_for_update}.")
+                if doc.exists:
+                    doc_ref.update({
+                        'remind_at': new_dt_obj_for_update
+                    })
+                    print(f"Reminder (ID: {reminder_id_to_update}) confirmed and updated to {new_dt_obj_for_update}.")
 
-                session_id = req['session']
-                response = {
-                    "fulfillmentText": f"Okay, I've successfully changed your reminder to '{reminder_task_found}' to {reminder_new_time_desired_formatted}.",
-                    "outputContexts": clear_all_update_contexts(session_id)
-                }
-                return jsonify(response)
+                    session_id = req['session']
+                    response = {
+                        "fulfillmentText": f"Okay, I've successfully changed your reminder to '{reminder_task_found}' to {reminder_new_time_desired_formatted}.",
+                        "outputContexts": clear_all_update_contexts(session_id)
+                    }
+                    return jsonify(response)
+                else:
+                    print(f"Attempted to update reminder {reminder_id_to_update} but it doesn't exist.")
+                    return jsonify({
+                        "fulfillmentText": "I'm sorry, I couldn't find that specific reminder to update. Please try again."
+                    })
+
             except ValueError as e:
                 print(f"Error parsing new time from context: {e}")
                 return jsonify({
@@ -833,7 +844,7 @@ def webhook():
         try:
             # Extract and parse the new time
             new_date_time_str = extract_datetime_str(new_date_time)
-            new_dt_obj = datetime.fromisoformat(str(new_date_time_str))
+            new_dt_obj = datetime.fromisoformat(new_date_time_str) # Removed redundant str() cast
             user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
             
             session_id = req['session']
@@ -880,9 +891,6 @@ def webhook():
         awaiting_selection_context = None
         context_name = None
         
-        # Debug: Print all outputContexts to help trace context issues
-        print("All outputContexts:", req.get('queryResult', {}).get('outputContexts', []))
-        
         # Check for both deletion and update selection contexts
         for context in req.get('queryResult', {}).get('inputContexts', []):
             if 'awaiting_deletion_selection' in context.get('name', ''):
@@ -901,7 +909,8 @@ def webhook():
 
         reminders_list_json = get_context_parameter(req, context_name, 'reminders_list')
         action_type = get_context_parameter(req, context_name, 'action_type')
-        new_time_iso_str_for_update = get_context_parameter(req, context_name, 'new_time_iso_str_for_update') # Only present for update action
+        # new_time_iso_str_for_update is only present for update action if it was given initially
+        new_time_iso_str_for_update = get_context_parameter(req, context_name, 'new_time_iso_str_for_update') 
 
         if not reminders_list_json:
             # Fallback: Offer to show the list again
@@ -917,27 +926,23 @@ def webhook():
         elif selection_time_str:
             # Try to match by time (e.g., "the one at 6pm")
             try:
-                selected_dt = datetime.fromisoformat(selection_time_str).astimezone(KUALA_LUMPUR_TZ)
+                # Ensure selection_time_str is parsed correctly for comparison
+                parsed_selection_dt = extract_datetime_str(selection_time_str)
+                selected_dt = datetime.fromisoformat(parsed_selection_dt).astimezone(KUALA_LUMPUR_TZ)
                 
-                # Iterate through reminders_list, parse their time strings back to datetime objects for comparison
                 for reminder in reminders_list:
-                    # Parse the string time from context back to datetime object
+                    # Parse the string time from context back to datetime object for comparison
+                    # Using datetime.strptime based on the known format "%I:%M %p on %B %d, %Y"
                     reminder_time_dt = datetime.strptime(reminder['time'], "%I:%M %p on %B %d, %Y").astimezone(KUALA_LUMPUR_TZ)
                     
-                    # Compare only hour and minute, and potentially date if specified in selection_time_str
-                    # For simplicity, let's compare exact time including date for now.
-                    # More robust comparison needed for "today", "tomorrow" etc.
-                    
-                    # Check if the minute difference is small enough (e.g., within 1 minute)
+                    # Compare only minute difference, good for near matches
                     time_difference = abs((selected_dt - reminder_time_dt).total_seconds())
                     if time_difference < 60: # If difference is less than 60 seconds
                         selected_reminder = reminder
                         print(f"Selected reminder by time: {selected_reminder}")
                         break
             except ValueError as e:
-                print(f"Error parsing selection_time_str: {e}")
-                # Handle cases where selection_time_str is not a precise datetime (e.g., "today", "tomorrow")
-                # This would require more sophisticated date/time matching.
+                print(f"Error parsing selection_time_str for comparison: {e}")
                 pass 
         
         if selected_reminder:
@@ -990,10 +995,9 @@ def webhook():
                 }
                 print("Transitioning to update confirmation.")
                 return jsonify(response)
-            elif action_type == "update_no_time":
-                # User selected a reminder but hasn't provided new time yet
+            elif action_type == "update_no_time": # FIX: Handle the new action_type
                 response = {
-                    "fulfillmentText": f"Great! What's the new time for your reminder?",
+                    "fulfillmentText": f"You've selected the '{selected_reminder['task']}' reminder. What's the new time you'd like to set it to?",
                     "outputContexts": [
                         {
                             "name": f"{session_id}/contexts/{context_name}",
@@ -1001,26 +1005,27 @@ def webhook():
                         },
                         {
                             "name": f"{session_id}/contexts/awaiting_update_time",
-                            "lifespanCount": 2,
+                            "lifespanCount": 2, 
                             "parameters": {
                                 "reminder_id_to_update": selected_reminder['id'],
                                 "reminder_task_found": selected_reminder['task'],
                                 "reminder_old_time_found": selected_reminder['time']
+                                # new_time_iso_str_for_update is NOT passed here as user hasn't provided it yet
                             }
                         }
                     ]
                 }
-                print("Transitioning to time capture for update.")
+                print("Transitioning to ask for new time for selected reminder (update_no_time).")
                 return jsonify(response)
             else:
                 return jsonify({
                     "fulfillmentText": "I'm sorry, I couldn't determine the action you want to perform for the selected reminder."
                 })
         else:
-            # If user replies with a time or invalid input, prompt again for a number
             return jsonify({
-                "fulfillmentText": "Please reply with a number from the list, like '1' or '2'."
+                "fulfillmentText": "I couldn't identify which reminder you meant. Please choose a number from the list or try specifying the time more precisely."
             })
+
     
     # Add OpenAI GPT-3.5-Turbo integration for FeelingHappyIntent
     elif intent_display_name == 'Feelinghappyintent':
