@@ -710,100 +710,52 @@ def webhook():
                     return jsonify(response)
 
             elif len(found_reminders) > 1:
-                # Multiple reminders found
-                if new_date_time_str:
-                    # New time provided, show rich content for selection
-                    try:
-                        clarification_reminders_data = []
-                        rich_content_items = []
-                        
-                        # Format new time for display
-                        new_dt_obj = datetime.fromisoformat(new_date_time_str)
-                        user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                        
-                        for i, reminder in enumerate(found_reminders):
-                            rich_content_items.append({
-                                "type": "info",
-                                "title": f"{i+1}. {reminder['task'].capitalize()}",
-                                "subtitle": f"at {reminder['remind_at']}",
-                                "event": {
-                                    "name": "",
-                                    "languageCode": "",
-                                    "parameters": {}
-                                }
-                            })
-                            clarification_reminders_data.append({
-                                'id': reminder['id'],
-                                'task': reminder['task'],
-                                'time': reminder['remind_at'],
-                                'time_raw': reminder['remind_at']
-                            })
-                        
-                        # Add prompt as a description card
-                        rich_content_items.append({
-                            "type": "description",
-                            "text": [f"Which one of these reminders should I change to {user_friendly_new_time_str}? Please reply with a number."]
-                        })
-                        
-                        session_id = req['session']
-                        response = {
-                            "fulfillmentMessages": [
-                                {
-                                    "payload": {
-                                        "richContent": [rich_content_items]
-                                    }
-                                }
-                            ],
-                            "outputContexts": [
-                                {
-                                    "name": f"{session_id}/contexts/awaiting_reminder_selection",
-                                    "lifespanCount": 2,
-                                    "parameters": {
-                                        "reminders_list": json.dumps(clarification_reminders_data),
-                                        "action_type": "update",
-                                        "new_time_iso_str_for_update": new_date_time_str
-                                    }
-                                }
-                            ]
-                        }
-                        print(f"Multiple reminders found for '{task_to_update}'. Asking for clarification for update using rich content.")
-                        return jsonify(response)
-                    except ValueError as e:
-                        print(f"Error parsing new time: {e}")
-                        return jsonify({
-                            "fulfillmentText": f"I couldn't understand the new time '{new_date_time_str}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
-                        })
-                else:
-                    # No new time provided, show simple list and ask for selection
-                    reminder_list_text = f"I found a few reminders to '{task_to_update}':\n\n"
-                    clarification_reminders_data = []
+                # Multiple reminders found, show rich content for selection
+                clarification_reminders_data = []
+                rich_content_items = []
 
-                    for i, reminder in enumerate(found_reminders):
-                        reminder_list_text += f"at {reminder['remind_at']}\n"
-                        clarification_reminders_data.append({
-                            'id': reminder['id'],
-                            'task': reminder['task'],
-                            'time': reminder['remind_at'],
-                            'time_raw': reminder['remind_at']
-                        })
-                    reminder_list_text += "Which one would you like to change?"
+                for i, reminder in enumerate(found_reminders):
+                    rich_content_items.append({
+                        "type": "info",
+                        "title": f"{i+1}. {reminder['task'].capitalize()}",
+                        "subtitle": f"at {reminder['remind_at']}"
+                    })
+                    clarification_reminders_data.append({
+                        'id': reminder['id'],
+                        'task': reminder['task'],
+                        'time': reminder['remind_at'],
+                        'time_raw': reminder['remind_at']
+                    })
 
-                    session_id = req['session']
-                    response = {
-                        "fulfillmentText": reminder_list_text,
-                        "outputContexts": [
-                            {
-                                "name": f"{session_id}/contexts/awaiting_reminder_selection",
-                                "lifespanCount": 2,
-                                "parameters": {
-                                    "reminders_list": json.dumps(clarification_reminders_data),
-                                    "action_type": "update_no_time"
-                                }
+                # Add prompt as a description card
+                rich_content_items.append({
+                    "type": "description",
+                    "text": [
+                        "Which one would you like to change? Please reply with a number, like '1' or '2'."
+                    ]
+                })
+
+                session_id = req['session']
+                response = {
+                    "fulfillmentMessages": [
+                        {
+                            "payload": {
+                                "richContent": [rich_content_items]
                             }
-                        ]
-                    }
-                    print(f"Multiple reminders found for '{task_to_update}'. Asking for selection without new time.")
-                    return jsonify(response)
+                        }
+                    ],
+                    "outputContexts": [
+                        {
+                            "name": f"{session_id}/contexts/awaiting_reminder_selection",
+                            "lifespanCount": 2,
+                            "parameters": {
+                                "reminders_list": json.dumps(clarification_reminders_data),
+                                "action_type": "update_no_time"
+                            }
+                        }
+                    ]
+                }
+                return jsonify(response)
 
         except ValueError as e:
             print(f"Date parsing error in update (should not happen if no old_date_time_str): {e}")
@@ -1063,8 +1015,9 @@ def webhook():
                     "fulfillmentText": "I'm sorry, I couldn't determine the action you want to perform for the selected reminder."
                 })
         else:
+            # If user replies with a time or invalid input, prompt again for a number
             return jsonify({
-                "fulfillmentText": "I couldn't identify which reminder you meant. Please choose a number from the list or try specifying the time more precisely."
+                "fulfillmentText": "Please reply with a number from the list, like '1' or '2'."
             })
     
     # Add OpenAI GPT-3.5-Turbo integration for FeelingHappyIntent
