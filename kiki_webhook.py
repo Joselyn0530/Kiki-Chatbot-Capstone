@@ -587,10 +587,22 @@ def webhook():
             else:
                 # No task and no time provided
                 session_id = req['session']
-                return jsonify({
-                    "fulfillmentText": "To change a reminder, please tell me the task. E.g., 'change sleep reminder' or 'change bath reminder'.",
-                    "outputContexts": clear_all_update_contexts(session_id)
-                })
+                new_date_time_str = parameters.get('new-date-time')
+                if new_date_time_str:
+                    try:
+                        new_dt_obj = datetime.fromisoformat(new_date_time_str)
+                        user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                    except Exception:
+                        user_friendly_new_time_str = new_date_time_str
+                    return jsonify({
+                        "fulfillmentText": f"I see you want to change a reminder to {user_friendly_new_time_str}, but I need to know which reminder you want to change. Please tell me the task or the current time of the reminder you want to update.",
+                        "outputContexts": clear_all_update_contexts(session_id)
+                    })
+                else:
+                    return jsonify({
+                        "fulfillmentText": "To change a reminder, please tell me the task. E.g., 'change sleep reminder' or 'change bath reminder'.",
+                        "outputContexts": clear_all_update_contexts(session_id)
+                    })
 
         try:
             # Base query for pending tasks, ordered by time
