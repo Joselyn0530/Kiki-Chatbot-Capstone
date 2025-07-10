@@ -441,6 +441,12 @@ def webhook():
         old_date_time_str = parameters.get('old-date-time')
         new_date_time_str = parameters.get('new-date-time')
 
+        # Ensure old_date_time_str and new_date_time_str are strings, not lists
+        if isinstance(old_date_time_str, list):
+            old_date_time_str = old_date_time_str[0] if old_date_time_str else None
+        if isinstance(new_date_time_str, list):
+            new_date_time_str = new_date_time_str[0] if new_date_time_str else None
+
         # Check for generic task names
         GENERIC_TASK_KEYWORDS = {"reminder", "reminders", "the reminder", "the reminders", "my reminder", "my reminders"}
         if task_to_update and task_to_update.lower() in GENERIC_TASK_KEYWORDS:
@@ -584,6 +590,11 @@ def webhook():
                     return jsonify({
                         "fulfillmentText": "I had trouble understanding the time. Please use a clear format like '4pm' or '2 PM'."
                     })
+                except Exception as e:
+                    print(f"Unexpected error in old_date_time_str parsing: {e}")
+                    return jsonify({
+                        "fulfillmentText": "Sorry, something went wrong while processing your request. Please try again."
+                    })
             else:
                 # No task and no time provided
                 session_id = req['session']
@@ -616,7 +627,12 @@ def webhook():
             if old_date_time_str:
                 # If a specific old time is given, filter by time window
                 try:
-                    old_dt_obj = datetime.fromisoformat(old_date_time_str)
+                    if old_date_time_str:
+                        old_dt_obj = datetime.fromisoformat(old_date_time_str)
+                    else:
+                        return jsonify({
+                            "fulfillmentText": "I couldn't understand the current time. Please use a clear format like '4pm' or '2 PM'."
+                        })
                     time_window_start = old_dt_obj - timedelta(minutes=1)
                     time_window_end = old_dt_obj + timedelta(minutes=1)
                     query = query.where('remind_at', '>=', time_window_start) \
@@ -633,13 +649,13 @@ def webhook():
                         # Format old and new times for user-friendly display in local timezone
                         user_friendly_old_time_str = reminder_data['remind_at'].astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                         try:
-                            new_dt_obj = datetime.fromisoformat(new_date_time_str)
-                            user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                        except ValueError as e:
-                            print(f"Error parsing new time: {e}")
-                            return jsonify({
-                                "fulfillmentText": f"I couldn't understand the new time '{new_date_time_str}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
-                            })
+                            if new_date_time_str:
+                                new_dt_obj = datetime.fromisoformat(new_date_time_str)
+                                user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                            else:
+                                return jsonify({
+                                    "fulfillmentText": f"I couldn't understand the new time '{new_date_time_str}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
+                                })
 
                         session_id = req['session']
                         response = {
@@ -671,6 +687,11 @@ def webhook():
                     print(f"Error parsing old date time: {e}")
                     return jsonify({
                         "fulfillmentText": "I had trouble understanding the current time. Please use a clear format like '4pm' or '2 PM'."
+                    })
+                except Exception as e:
+                    print(f"Unexpected error in old_date_time_str parsing (task-specific, branch 2): {e}")
+                    return jsonify({
+                        "fulfillmentText": "Sorry, something went wrong while processing your request. Please try again."
                     })
             else:
                 # No specific old time provided, get all reminders for the task
@@ -864,6 +885,8 @@ def webhook():
     elif intent_display_name == 'update.reminder_new_time':
         parameters = req.get('queryResult', {}).get('parameters', {})
         new_date_time = parameters.get('date-time')
+        if isinstance(new_date_time, list):
+            new_date_time = new_date_time[0] if new_date_time else None
         
         # Get reminder details from context
         reminder_id_to_update = get_context_parameter(req, 'awaiting_update_time', 'reminder_id_to_update')
@@ -878,8 +901,15 @@ def webhook():
         try:
             # Extract and parse the new time
             new_date_time_str = extract_datetime_str(new_date_time)
-            new_dt_obj = datetime.fromisoformat(new_date_time_str) # Removed redundant str() cast
-            user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+            if isinstance(new_date_time_str, list):
+                new_date_time_str = new_date_time_str[0] if new_date_time_str else None
+            if new_date_time_str:
+                new_dt_obj = datetime.fromisoformat(new_date_time_str) # Removed redundant str() cast
+                user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+            else:
+                return jsonify({
+                    "fulfillmentText": f"I couldn't understand the time '{new_date_time}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
+                })
             
             session_id = req['session']
             response = {
