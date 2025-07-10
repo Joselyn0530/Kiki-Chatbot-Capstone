@@ -44,27 +44,32 @@ def get_context_parameter(req_payload, context_name_part, param_name):
                 return context['parameters'][param_name]
     return None
 
-# Helper to extract date-time string from dict or return as-is
 def extract_datetime_str(dt):
-    if isinstance(dt, dict) and 'date_time' in dt:
-        return str(dt['date_time'])
-    return str(dt) if dt is not None else ''
-
-def extract_user_friendly_time(dt):
-    # If it's a list, get the first element
+    """
+    Extracts an ISO-formatted date-time string from Dialogflow parameter formats.
+    Handles: string, list of string, dict with 'startTime', list of dicts.
+    Returns: ISO string or None.
+    """
     if isinstance(dt, list):
         dt = dt[0] if dt else None
-    # If it's a dict with startTime, use that
     if isinstance(dt, dict):
-        dt = dt.get('startTime', '')
-    if dt:
+        dt = dt.get('startTime', None)
+    if isinstance(dt, str):
         try:
-            dt_obj = datetime.fromisoformat(dt)
-            # Malaysia timezone formatting (if you want to localize, use pytz as in your code)
-            return dt_obj.strftime("%I:%M %p on %B %d, %Y")
+            # Validate/normalize with dateutil
+            return parser.isoparse(dt).isoformat()
         except Exception:
-            return str(dt)
-    return ''
+            return None
+    return None
+
+def user_friendly_time(dt_str):
+    if not dt_str:
+        return ""
+    try:
+        dt_obj = parser.isoparse(dt_str)
+        return dt_obj.strftime("%I:%M %p on %B %d, %Y")
+    except Exception:
+        return str(dt_str)
 
 # Helper to clear all update-related contexts
 def clear_all_update_contexts(session_id):
@@ -284,7 +289,7 @@ def webhook():
                     reminder = found_reminders[0]
                     session_id = req['session']
                     response = {
-                        "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {extract_user_friendly_time(reminder['remind_at'])}. Do you want me to delete it?",
+                        "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {user_friendly_time(reminder['remind_at'])}. Do you want me to delete it?",
                         "outputContexts": [
                             {
                                 "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
@@ -292,7 +297,7 @@ def webhook():
                                 "parameters": {
                                     "reminder_id_to_delete": reminder['id'],
                                     "reminder_task_found": reminder['task'],
-                                    "reminder_time_found_str": extract_user_friendly_time(reminder['remind_at']),
+                                    "reminder_time_found_str": user_friendly_time(reminder['remind_at']),
                                     "reminder_time_found_raw": reminder['remind_at_raw']
                                 }
                             }
@@ -306,7 +311,7 @@ def webhook():
                         rich_content_items.append({
                             "type": "info",
                             "title": f"{i+1}. {reminder['task'].capitalize()}",
-                            "subtitle": f"at {extract_user_friendly_time(reminder['remind_at'])}",
+                            "subtitle": f"at {user_friendly_time(reminder['remind_at'])}",
                             "event": {
                                 "name": "",
                                 "languageCode": "",
@@ -316,7 +321,7 @@ def webhook():
                         clarification_reminders_data.append({
                             'id': reminder['id'],
                             'task': reminder['task'],
-                            'time': extract_user_friendly_time(reminder['remind_at']),
+                            'time': user_friendly_time(reminder['remind_at']),
                             'time_raw': reminder['remind_at_raw']
                         })
                     # Add prompt as a description card
@@ -381,7 +386,7 @@ def webhook():
         if selection_index is not None and 1 <= selection_index <= len(reminders_list):
             selected_reminder = reminders_list[selection_index - 1]
             response = {
-                "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {extract_user_friendly_time(selected_reminder['time'])}. Confirm delete it?",
+                "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {user_friendly_time(selected_reminder['time'])}. Confirm delete it?",
                 "outputContexts": [
                     {
                         "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
@@ -389,7 +394,7 @@ def webhook():
                         "parameters": {
                             "reminder_id_to_delete": selected_reminder['id'],
                             "reminder_task_found": selected_reminder['task'],
-                            "reminder_time_found": extract_user_friendly_time(selected_reminder['time'])
+                            "reminder_time_found": user_friendly_time(selected_reminder['time'])
                         }
                     }
                 ]
@@ -454,8 +459,8 @@ def webhook():
     elif intent_display_name == 'update.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
         task_to_update = parameters.get('task')
-        old_date_time_str = parameters.get('old-date-time')
-        new_date_time_str = parameters.get('new-date-time')
+        old_date_time_str = extract_datetime_str(parameters.get('old-date-time'))
+        new_date_time_str = extract_datetime_str(parameters.get('new-date-time'))
 
         # Ensure old_date_time_str and new_date_time_str are strings, not lists
         if isinstance(old_date_time_str, list):
@@ -515,7 +520,7 @@ def webhook():
                                 user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
 
                                 response = {
-                                    "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {reminder['remind_at']}. Do you want to change it to {user_friendly_new_time_str}?",
+                                    "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {user_friendly_time(reminder['remind_at'])}. Do you want to change it to {user_friendly_new_time_str}?",
                                     "outputContexts": [
                                         {
                                             "name": f"{session_id}/contexts/awaiting_update_confirmation",
@@ -523,7 +528,7 @@ def webhook():
                                             "parameters": {
                                                 "reminder_id_to_update": reminder['id'],
                                                 "reminder_task_found": reminder['task'],
-                                                "reminder_old_time_found": reminder['remind_at'], 
+                                                "reminder_old_time_found": user_friendly_time(reminder['remind_at']), 
                                                 "reminder_new_time_desired_iso_str": new_date_time_str,
                                                 "reminder_new_time_desired_formatted": user_friendly_new_time_str
                                             }
@@ -539,7 +544,7 @@ def webhook():
                         else:
                             # No new time provided, ask for the new time
                             response = {
-                                "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {reminder['remind_at']}. Sure. What's the new time for your reminder?",
+                                "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {user_friendly_time(reminder['remind_at'])}. Sure. What's the new time for your reminder?",
                                 "outputContexts": [
                                     {
                                         "name": f"{session_id}/contexts/awaiting_update_time",
@@ -547,7 +552,7 @@ def webhook():
                                         "parameters": {
                                             "reminder_id_to_update": reminder['id'],
                                             "reminder_task_found": reminder['task'],
-                                            "reminder_old_time_found": reminder['remind_at']
+                                            "reminder_old_time_found": user_friendly_time(reminder['remind_at'])
                                         }
                                     }
                                 ]
@@ -563,12 +568,12 @@ def webhook():
                             rich_content_items.append({
                                 "type": "info",
                                 "title": f"{i+1}. {reminder['task'].capitalize()}",
-                                "subtitle": f"at {reminder['remind_at']}"
+                                "subtitle": f"at {user_friendly_time(reminder['remind_at'])}"
                             })
                             clarification_reminders_data.append({
                                 'id': reminder['id'],
                                 'task': reminder['task'],
-                                'time': reminder['remind_at'],
+                                'time': user_friendly_time(reminder['remind_at']),
                                 'time_raw': reminder['remind_at']
                             })
                         # Add prompt as a description card
@@ -614,13 +619,9 @@ def webhook():
             else:
                 # No task and no time provided
                 session_id = req['session']
-                new_date_time_str = parameters.get('new-date-time')
+                new_date_time_str = extract_datetime_str(parameters.get('new-date-time'))
                 if new_date_time_str:
-                    try:
-                        new_dt_obj = datetime.fromisoformat(new_date_time_str)
-                        user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                    except Exception:
-                        user_friendly_new_time_str = new_date_time_str
+                    user_friendly_new_time_str = user_friendly_time(new_date_time_str)
                     return jsonify({
                         "fulfillmentText": f"I see you want to change a reminder to {user_friendly_new_time_str}, but I need to know which reminder you want to change. Please tell me the task or the current time of the reminder you want to update.",
                         "outputContexts": clear_all_update_contexts(session_id)
@@ -748,7 +749,7 @@ def webhook():
                         user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
 
                         response = {
-                            "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {reminder['remind_at']}. Do you want to change it to {user_friendly_new_time_str}?",
+                            "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {user_friendly_time(reminder['remind_at'])}. Do you want to change it to {user_friendly_new_time_str}?",
                             "outputContexts": [
                                 {
                                     "name": f"{session_id}/contexts/awaiting_update_confirmation",
@@ -756,7 +757,7 @@ def webhook():
                                     "parameters": {
                                         "reminder_id_to_update": reminder['id'],
                                         "reminder_task_found": reminder['task'],
-                                        "reminder_old_time_found": reminder['remind_at'], 
+                                        "reminder_old_time_found": user_friendly_time(reminder['remind_at']), 
                                         "reminder_new_time_desired_iso_str": new_date_time_str,
                                         "reminder_new_time_desired_formatted": user_friendly_new_time_str
                                     }
@@ -773,7 +774,7 @@ def webhook():
                 else:
                     # No new time provided, ask for the new time
                     response = {
-                        "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {reminder['remind_at']}. Sure. What's the new time for your reminder?",
+                        "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {user_friendly_time(reminder['remind_at'])}. Sure. What's the new time for your reminder?",
                         "outputContexts": [
                             {
                                 "name": f"{session_id}/contexts/awaiting_update_time",
@@ -781,7 +782,7 @@ def webhook():
                                 "parameters": {
                                     "reminder_id_to_update": reminder['id'],
                                     "reminder_task_found": reminder['task'],
-                                    "reminder_old_time_found": reminder['remind_at']
+                                    "reminder_old_time_found": user_friendly_time(reminder['remind_at'])
                                 }
                             }
                         ]
@@ -798,12 +799,12 @@ def webhook():
                     rich_content_items.append({
                         "type": "info",
                         "title": f"{i+1}. {reminder['task'].capitalize()}",
-                        "subtitle": f"at {reminder['remind_at']}"
+                        "subtitle": f"at {user_friendly_time(reminder['remind_at'])}"
                     })
                     clarification_reminders_data.append({
                         'id': reminder['id'],
                         'task': reminder['task'],
-                        'time': reminder['remind_at'],
+                        'time': user_friendly_time(reminder['remind_at']),
                         'time_raw': reminder['remind_at']
                     })
 
@@ -938,7 +939,7 @@ def webhook():
             
             session_id = req['session']
             response = {
-                "fulfillmentText": f"Just to confirm: You want to change your '{reminder_task_found}' reminder from {reminder_old_time_found} to {user_friendly_new_time_str}. Should I go ahead?",
+                "fulfillmentText": f"Just to confirm: You want to change your '{reminder_task_found}' reminder from {user_friendly_time(reminder_old_time_found)} to {user_friendly_new_time_str}. Should I go ahead?",
                 "outputContexts": [
                     {
                         "name": f"{session_id}/contexts/awaiting_update_time",
@@ -996,7 +997,7 @@ def webhook():
         if selection_index is not None and 1 <= selection_index <= len(reminders_list):
             selected_reminder = reminders_list[selection_index - 1]
             response = {
-                "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {extract_user_friendly_time(selected_reminder['time'])}. What's the new time?",
+                "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {user_friendly_time(selected_reminder['time'])}. What's the new time?",
                 "outputContexts": [
                     {
                         "name": f"{session_id}/contexts/awaiting_update_time",
@@ -1004,7 +1005,7 @@ def webhook():
                         "parameters": {
                             "reminder_id_to_update": selected_reminder['id'],
                             "reminder_task_found": selected_reminder['task'],
-                            "reminder_old_time_found": selected_reminder['time']
+                            "reminder_old_time_found": user_friendly_time(selected_reminder['time'])
                         }
                     }
                 ]
