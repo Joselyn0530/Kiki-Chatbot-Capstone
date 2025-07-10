@@ -524,22 +524,47 @@ def webhook():
                     return jsonify(response)
 
                 elif len(found_reminders) > 1:
-                    # Multiple reminders found, ask user to clarify
-                    reminder_list_text = "I found a few reminders to '{task_to_update}':<br><br>".format(task_to_update=task_to_update)
-                    clarification_reminders_data = [] # To store in context
-
+                    # Multiple reminders found, ask user to clarify using rich content
+                    clarification_reminders_data = []
+                    rich_content_items = []
+                    
+                    # Format new time for display
+                    new_dt_obj = datetime.fromisoformat(new_date_time_str)
+                    user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                    
                     for i, reminder in enumerate(found_reminders):
-                        reminder_list_text += f"{i+1}. at {reminder['remind_at']}<br><br>"
+                        rich_content_items.append({
+                            "type": "info",
+                            "title": f"{i+1}. {reminder['task'].capitalize()}",
+                            "subtitle": f"at {reminder['remind_at']}",
+                            "event": {
+                                "name": "",
+                                "languageCode": "",
+                                "parameters": {}
+                            }
+                        })
                         clarification_reminders_data.append({
                             'id': reminder['id'],
                             'task': reminder['task'],
-                            'time': reminder['remind_at']
+                            'time': reminder['remind_at'],
+                            'time_raw': reminder['remind_at']
                         })
-                    reminder_list_text += "Which one do you want to change?"
-
+                    
+                    # Add prompt as a description card
+                    rich_content_items.append({
+                        "type": "description",
+                        "text": [f"Which reminder do you want to change to {user_friendly_new_time_str}? Please reply with the number, like \"1\" or \"2\"."]
+                    })
+                    
                     session_id = req['session']
                     response = {
-                        "fulfillmentText": reminder_list_text,
+                        "fulfillmentMessages": [
+                            {
+                                "payload": {
+                                    "richContent": [rich_content_items]
+                                }
+                            }
+                        ],
                         "outputContexts": [
                             {
                                 "name": f"{session_id}/contexts/awaiting_reminder_selection",
@@ -552,7 +577,7 @@ def webhook():
                             }
                         ]
                     }
-                    print(f"Multiple reminders found for '{task_to_update}'. Asking for clarification for update.")
+                    print(f"Multiple reminders found for '{task_to_update}'. Asking for clarification for update using rich content.")
                     return jsonify(response)
                 
                 else:
@@ -638,9 +663,17 @@ def webhook():
 
         session_id = req['session']
         awaiting_selection_context = None
+        context_name = None
+        
+        # Check for both deletion and update selection contexts
         for context in req.get('queryResult', {}).get('inputContexts', []):
             if 'awaiting_deletion_selection' in context.get('name', ''):
                 awaiting_selection_context = context
+                context_name = 'awaiting_deletion_selection'
+                break
+            elif 'awaiting_reminder_selection' in context.get('name', ''):
+                awaiting_selection_context = context
+                context_name = 'awaiting_reminder_selection'
                 break
         
         if not awaiting_selection_context:
@@ -648,9 +681,9 @@ def webhook():
                 "fulfillmentText": "I'm sorry, I'm not sure which list of reminders you're referring to. Please try again from the beginning."
             })
 
-        reminders_list_json = get_context_parameter(req, 'awaiting_deletion_selection', 'reminders_list')
-        action_type = get_context_parameter(req, 'awaiting_deletion_selection', 'action_type')
-        new_time_iso_str_for_update = get_context_parameter(req, 'awaiting_deletion_selection', 'new_time_iso_str_for_update') # Only present for update action
+        reminders_list_json = get_context_parameter(req, context_name, 'reminders_list')
+        action_type = get_context_parameter(req, context_name, 'action_type')
+        new_time_iso_str_for_update = get_context_parameter(req, context_name, 'new_time_iso_str_for_update') # Only present for update action
 
         if not reminders_list_json:
             return jsonify({
@@ -696,7 +729,7 @@ def webhook():
                     "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. Confirm delete?",
                     "outputContexts": [
                         {
-                            "name": f"{session_id}/contexts/awaiting_deletion_selection",
+                            "name": f"{session_id}/contexts/{context_name}",
                             "lifespanCount": 0 # Clear the selection context
                         },
                         {
@@ -721,7 +754,7 @@ def webhook():
                     "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {selected_reminder['time']} to {new_time_formatted}. Confirm update?",
                     "outputContexts": [
                         {
-                            "name": f"{session_id}/contexts/awaiting_deletion_selection",
+                            "name": f"{session_id}/contexts/{context_name}",
                             "lifespanCount": 0 # Clear the selection context
                         },
                         {
