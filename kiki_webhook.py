@@ -25,12 +25,93 @@ if firebase_key_json:
         print(f"Error setting up credentials from environment variable: {e}")
 else:
     print("FIREBASE_SERVICE_ACCOUNT_KEY environment variable not found. Relying on default credentials or local setup.")
-# --- END CREDENTIALS SETUP FOR RENDER ---\n
+# --- END CREDENTIALS SETUP FOR RENDER ---
+
 app = Flask(__name__)
 db = firestore.Client()
 
 # Define the local timezone for display (Malaysia, GMT+8)
 KUALA_LUMPUR_TZ = pytz.timezone('Asia/Kuala_Lumpur')
+
+# OpenAI Configuration
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+OPENAI_MODEL = "gpt-3.5-turbo"
+
+# Kiki's System Prompt for OpenAI
+KIKI_SYSTEM_PROMPT = """You are Kiki, a warm, friendly, and supportive AI companion designed specifically for elderly users. 
+
+Your personality:
+- Speak simply and warmly like a caring friend or grandchild
+- Be patient, empathetic, and encouraging
+- Use simple language and avoid technical terms
+- Show genuine interest in their well-being and daily life
+- Provide emotional support and light companionship
+
+When asked "Who are you?" or "What can you do?", explain:
+"I'm Kiki, your friendly virtual companion! I'm here to chat with you, play fun games, or help remind you of things like taking medicine. I love hearing about your day and being here for you."
+
+Your responses should be:
+- Conversational and natural
+- 2-4 sentences long (not too long)
+- Positive and uplifting
+- Focused on emotional connection
+- Appropriate for elderly users who may be feeling lonely
+
+Remember: You're not a medical professional or technical support. You're a friendly companion who provides emotional support and casual conversation."""
+
+def get_openai_response(user_message, session_id):
+    """
+    Get a response from OpenAI for chat interactions.
+    Returns the AI response or a fallback message if there's an error.
+    """
+    if not OPENAI_API_KEY:
+        return "I'm having trouble connecting to my chat features right now. Let me help you with reminders or games instead!"
+    
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": KIKI_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=150,  # Keep responses concise
+            temperature=0.7   # Balanced creativity
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"OpenAI API error: {e}")
+        return "I'm having a little trouble thinking right now. Let me help you with reminders or games instead!"
+
+def is_chat_mode_active(req_payload):
+    """
+    Check if the user is currently in chat mode by looking for chat_mode context.
+    """
+    contexts = req_payload.get('queryResult', {}).get('inputContexts', [])
+    for context in contexts:
+        if 'chat_mode' in context.get('name', ''):
+            return True
+    return False
+
+def set_chat_mode_context(session_id, lifespan=5):
+    """
+    Set the chat_mode context to indicate the user is in free-form chat.
+    """
+    return {
+        "name": f"{session_id}/contexts/chat_mode",
+        "lifespanCount": lifespan,
+        "parameters": {}
+    }
+
+def clear_chat_mode_context(session_id):
+    """
+    Clear the chat_mode context to exit free-form chat.
+    """
+    return {
+        "name": f"{session_id}/contexts/chat_mode",
+        "lifespanCount": 0,
+        "parameters": {}
+    }
 
 # Helper function to get context parameter
 def get_context_parameter(req_payload, context_name_part, param_name):
@@ -94,7 +175,101 @@ def webhook():
 
     intent_display_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     print(f"Intent Display Name: {intent_display_name}")
+    
+    session_id = req['session']
+    user_message = req.get('queryResult', {}).get('queryText', '')
 
+    # === CHAT-RELATED INTENT HANDLING ===
+    
+    # Handle open.ai_chat intent - Start chat mode
+    if intent_display_name == 'open.ai_chat':
+        ai_response = get_openai_response(user_message, session_id)
+        return jsonify({
+            "fulfillmentText": ai_response,
+            "outputContexts": [set_chat_mode_context(session_id)]
+        })
+    
+    # Handle ContinueChatIntent - Continue chat in chat mode
+    elif intent_display_name == 'ContinueChatIntent':
+        if is_chat_mode_active(req):
+            ai_response = get_openai_response(user_message, session_id)
+            return jsonify({
+                "fulfillmentText": ai_response,
+                "outputContexts": [set_chat_mode_context(session_id)]
+            })
+        else:
+            return jsonify({
+                "fulfillmentText": "I'd love to chat with you! Just say 'Chat with me' to start a friendly conversation.",
+                "fulfillmentMessages": [
+                    {
+                        "text": {"text": ["I'd love to chat with you! Just say 'Chat with me' to start a friendly conversation."]},
+                        "platform": "ACTIONS_ON_GOOGLE"
+                    },
+                    {
+                        "payload": {
+                            "google": {
+                                "richResponse": {
+                                    "items": [
+                                        {
+                                            "simpleResponse": {
+                                                "textToSpeech": "I'd love to chat with you! Just say 'Chat with me' to start a friendly conversation."
+                                            }
+                                        }
+                                    ],
+                                    "suggestions": [
+                                        {"title": "Chat with me"},
+                                        {"title": "Set a reminder"},
+                                        {"title": "Play a game"}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            })
+    
+    # Handle FallbackDuringChatIntent - Fallback only during chat mode
+    elif intent_display_name == 'FallbackDuringChatIntent':
+        if is_chat_mode_active(req):
+            ai_response = get_openai_response(user_message, session_id)
+            return jsonify({
+                "fulfillmentText": ai_response,
+                "outputContexts": [set_chat_mode_context(session_id)]
+            })
+        else:
+            # If not in chat mode, this shouldn't be triggered, but provide a fallback
+            return jsonify({
+                "fulfillmentText": "I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?",
+                "fulfillmentMessages": [
+                    {
+                        "text": {"text": ["I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?"]},
+                        "platform": "ACTIONS_ON_GOOGLE"
+                    },
+                    {
+                        "payload": {
+                            "google": {
+                                "richResponse": {
+                                    "items": [
+                                        {
+                                            "simpleResponse": {
+                                                "textToSpeech": "I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?"
+                                            }
+                                        }
+                                    ],
+                                    "suggestions": [
+                                        {"title": "Set a reminder"},
+                                        {"title": "Play a game"},
+                                        {"title": "Chat with me"}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            })
+    
+    # === STRUCTURED TASK HANDLING ===
+    
     if intent_display_name == 'set.reminder':
         # Clear any lingering update contexts when starting a new reminder flow
         session_id = req['session']
@@ -623,7 +798,7 @@ def webhook():
                 if new_date_time_str:
                     user_friendly_new_time_str = user_friendly_time(new_date_time_str)
                     return jsonify({
-                        "fulfillmentText": f"I see you want to change a reminder to {user_friendly_new_time_str}, but I need to know which reminder you want to change. Please tell me the task or the current time of the reminder you want to update. E.g., 'change sleep reminder' or 'change bath reminder'.",
+                        "fulfillmentText": f"I see you want to change a reminder to {user_friendly_new_time_str}, but I need to know which reminder you want to change. Please tell me the task and the current time of the reminder you want to update. E.g., 'change sleep reminder' or 'change bath reminder'.",
                         "outputContexts": clear_all_update_contexts(session_id)
                     })
                 else:
@@ -1017,33 +1192,6 @@ def webhook():
             })
 
     
-    # Add OpenAI GPT-3.5-Turbo integration for FeelingHappyIntent
-    elif intent_display_name == 'Feelinghappyintent':
-        user_message = req.get('queryResult', {}).get('queryText', '')
-        openai_api_key = os.environ.get('OPENAI_API_KEY')
-        if not openai_api_key:
-            return jsonify({
-                "fulfillmentText": "OpenAI API key is not set on the server."
-            })
-        try:
-            client = openai.OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a warm, friendly, and supportive companion chatbot for elderly users. Always provide emotional support, empathy, and encouragement. Respond in a gentle, caring, and positive manner, suitable for older adults who may be feeling lonely or in need of a friend."},
-                    {"role": "user", "content": user_message}
-                ]
-            )
-            ai_reply = response.choices[0].message.content
-            return jsonify({
-                "fulfillmentText": ai_reply
-            })
-        except Exception as e:
-            print(f"OpenAI API error: {e}")
-            return jsonify({
-                "fulfillmentText": "Sorry, I couldn't process your request right now."
-            })
-    
     # Handle CaptureTimeIntent for time follow-up
     elif intent_display_name == 'CaptureTimeIntent':
         parameters = req.get('queryResult', {}).get('parameters', {})
@@ -1194,6 +1342,47 @@ def webhook():
                 return jsonify({
                     "fulfillmentText": "Oops! I need both the task and the time. Could you try again?"
                 })
+
+    # Handle Default Fallback Intent - Only when not in chat mode
+    elif intent_display_name == 'Default Fallback Intent':
+        if is_chat_mode_active(req):
+            # If in chat mode, forward to OpenAI
+            ai_response = get_openai_response(user_message, session_id)
+            return jsonify({
+                "fulfillmentText": ai_response,
+                "outputContexts": [set_chat_mode_context(session_id)]
+            })
+        else:
+            # If not in chat mode, show friendly fallback with suggestions
+            return jsonify({
+                "fulfillmentText": "I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?",
+                "fulfillmentMessages": [
+                    {
+                        "text": {"text": ["I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?"]},
+                        "platform": "ACTIONS_ON_GOOGLE"
+                    },
+                    {
+                        "payload": {
+                            "google": {
+                                "richResponse": {
+                                    "items": [
+                                        {
+                                            "simpleResponse": {
+                                                "textToSpeech": "I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?"
+                                            }
+                                        }
+                                    ],
+                                    "suggestions": [
+                                        {"title": "Set a reminder"},
+                                        {"title": "Play a game"},
+                                        {"title": "Chat with me"}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            })
 
     # Fallback if no specific intent is matched
     return jsonify({
