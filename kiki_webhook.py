@@ -94,7 +94,7 @@ def webhook():
             # Format the time for user-friendly display
             try:
                 dt_str = extract_datetime_str(date_time_str)
-                dt_obj = datetime.fromisoformat(dt_str)
+                dt_obj = datetime.fromisoformat(str(dt_str))
                 user_friendly_time_str = dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
             except Exception:
                 user_friendly_time_str = str(date_time_str)
@@ -110,10 +110,6 @@ def webhook():
                         }
                     }
                 ]
-            })
-        elif not task and not date_time_str:
-            return jsonify({
-                "fulfillmentText": "Sure! 😊 What should I remind you about?"
             })
         elif not date_time_str:
             # Save task to context and ask for time
@@ -131,7 +127,8 @@ def webhook():
             })
         else:
             try:
-                reminder_dt_obj = datetime.fromisoformat(date_time_str)
+                dt_str = extract_datetime_str(date_time_str)
+                reminder_dt_obj = datetime.fromisoformat(str(dt_str))
 
                 reminder_data = {
                     'task': task,
@@ -147,6 +144,18 @@ def webhook():
                 response = {
                     "fulfillmentMessages": [
                         {"text": {"text": [f"Got it! I'll remind you to {task} at {user_friendly_time_str}."]}
+                        }
+                    ],
+                    "outputContexts": [
+                        {
+                            "name": f"{req['session']}/contexts/await_task",
+                            "lifespanCount": 0,
+                            "parameters": {}
+                        },
+                        {
+                            "name": f"{req['session']}/contexts/await_time",
+                            "lifespanCount": 0,
+                            "parameters": {}
                         }
                     ]
                 }
