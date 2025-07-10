@@ -534,22 +534,38 @@ def webhook():
                     else:
                         # Multiple reminders found at that time
                         user_friendly_time_str = old_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                        reminder_list_text = f"I found a few reminders at {user_friendly_time_str}:\n\n"
                         clarification_reminders_data = []
+                        rich_content_items = []
 
                         for i, reminder in enumerate(found_reminders):
-                            reminder_list_text += f"- {reminder['task']} reminder\n"
+                            rich_content_items.append({
+                                "type": "info",
+                                "title": f"{i+1}. {reminder['task'].capitalize()}",
+                                "subtitle": f"at {reminder['remind_at']}"
+                            })
                             clarification_reminders_data.append({
                                 'id': reminder['id'],
                                 'task': reminder['task'],
                                 'time': reminder['remind_at'],
                                 'time_raw': reminder['remind_at']
                             })
-                        reminder_list_text += "\nWhich reminder would you like to change?"
+                        # Add prompt as a description card
+                        rich_content_items.append({
+                            "type": "description",
+                            "text": [
+                                "Which one would you like to change? Please reply with a number, like '1' or '2'."
+                            ]
+                        })
 
                         session_id = req['session']
                         response = {
-                            "fulfillmentText": reminder_list_text,
+                            "fulfillmentMessages": [
+                                {
+                                    "payload": {
+                                        "richContent": [rich_content_items]
+                                    }
+                                }
+                            ],
                             "outputContexts": [
                                 {
                                     "name": f"{session_id}/contexts/awaiting_update_selection",
