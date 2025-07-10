@@ -190,8 +190,8 @@ def webhook():
 
     # === CHAT-RELATED INTENT HANDLING ===
     
-    # Handle open.ai_chat intent - Start chat mode
-    if intent_display_name == 'open.ai_chat':
+    # Handle OpenAiChat intent - Start chat mode
+    if intent_display_name == 'OpenAiChat':
         ai_response = get_openai_response(user_message, session_id)
         return jsonify({
             "fulfillmentText": ai_response,
