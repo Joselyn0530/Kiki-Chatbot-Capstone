@@ -881,6 +881,9 @@ def webhook():
         awaiting_selection_context = None
         context_name = None
         
+        # Debug: Print all outputContexts to help trace context issues
+        print("All outputContexts:", req.get('queryResult', {}).get('outputContexts', []))
+        
         # Check for both deletion and update selection contexts
         for context in req.get('queryResult', {}).get('inputContexts', []):
             if 'awaiting_deletion_selection' in context.get('name', ''):
@@ -902,10 +905,10 @@ def webhook():
         new_time_iso_str_for_update = get_context_parameter(req, context_name, 'new_time_iso_str_for_update') # Only present for update action
 
         if not reminders_list_json:
+            # Fallback: Offer to show the list again
             return jsonify({
-                "fulfillmentText": "I'm sorry, I don't have the list of reminders anymore. Could you please rephrase your request from the beginning?"
+                "fulfillmentText": "I lost track of the reminders. Would you like to see the list again?"
             })
-        
         reminders_list = json.loads(reminders_list_json)
         selected_reminder = None
 
