@@ -388,7 +388,7 @@ def webhook():
     elif intent_display_name == 'delete.reminder - yes':
         reminder_id_to_delete = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_id_to_delete')
         reminder_task_found = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_task_found')
-        reminder_time_found_str = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found_str')
+        reminder_time_found_str = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found')
         reminder_time_found_raw = get_context_parameter(req, 'awaiting_deletion_confirmation', 'reminder_time_found_raw')
         session_id = req['session']
         if reminder_id_to_delete:
@@ -889,147 +889,44 @@ def webhook():
 
     # Handle select.reminder_to_manage_update intent (user clarifies which reminder from a list)
     elif intent_display_name == 'select.reminder_to_manage_update':
-        print("[DEBUG] Entered select.reminder_to_manage_update handler")
         parameters = req.get('queryResult', {}).get('parameters', {})
-        selection_index = parameters.get('selection_index') # e.g., 1, 2, 3
-        selection_time_str = parameters.get('selection_time') # e.g., "6pm", "tomorrow"
-
+        selection_index = parameters.get('selection_index')
         session_id = req['session']
-        awaiting_selection_context = None
-        context_name = None
-        # Debug: Print inputContexts again for this handler
-        print("[DEBUG] inputContexts in select.reminder_to_manage_update:", req.get('queryResult', {}).get('inputContexts', []))
-        
-        # Check for both deletion and update selection contexts
-        for context in req.get('queryResult', {}).get('inputContexts', []):
-            if 'awaiting_deletion_selection' in context.get('name', ''):
-                awaiting_selection_context = context
-                context_name = 'awaiting_deletion_selection'
+        # Get reminders list from context
+        reminders_list_json = None
+        for context in req.get('queryResult', {}).get('outputContexts', []):
+            if 'awaiting_update_selection' in context.get('name', ''):
+                reminders_list_json = context.get('parameters', {}).get('reminders_list')
                 break
-            elif 'awaiting_update_selection' in context.get('name', ''):
-                awaiting_selection_context = context
-                context_name = 'awaiting_update_selection'
-                break
-        
-        if not awaiting_selection_context:
-            return jsonify({
-                "fulfillmentText": "I'm sorry, I'm not sure which list of reminders you're referring to. Please try again from the beginning."
-            })
-
-        reminders_list_json = get_context_parameter(req, context_name, 'reminders_list')
-        action_type = get_context_parameter(req, context_name, 'action_type')
-        # new_time_iso_str_for_update is only present for update action if it was given initially
-        new_time_iso_str_for_update = get_context_parameter(req, context_name, 'new_time_iso_str_for_update') 
-
         if not reminders_list_json:
-            # Fallback: Offer to show the list again
             return jsonify({
-                "fulfillmentText": "I lost track of the reminders. Would you like to see the list again?"
+                "fulfillmentText": "I'm sorry, I don't have the list of reminders anymore. Could you please rephrase your request from the beginning?"
             })
         reminders_list = json.loads(reminders_list_json)
-        selected_reminder = None
-
-        if selection_index is not None and selection_index > 0 and selection_index <= len(reminders_list):
-            selected_reminder = reminders_list[selection_index - 1] # -1 because list is 0-indexed
-            print(f"Selected reminder by index: {selected_reminder}")
-        elif selection_time_str:
-            # Try to match by time (e.g., "the one at 6pm")
-            try:
-                # Ensure selection_time_str is parsed correctly for comparison
-                parsed_selection_dt = extract_datetime_str(selection_time_str)
-                selected_dt = datetime.fromisoformat(parsed_selection_dt).astimezone(KUALA_LUMPUR_TZ)
-                
-                for reminder in reminders_list:
-                    # Parse the string time from context back to datetime object for comparison
-                    # Using datetime.strptime based on the known format "%I:%M %p on %B %d, %Y"
-                    reminder_time_dt = datetime.strptime(reminder['time'], "%I:%M %p on %B %d, %Y").astimezone(KUALA_LUMPUR_TZ)
-                    
-                    # Compare only minute difference, good for near matches
-                    time_difference = abs((selected_dt - reminder_time_dt).total_seconds())
-                    if time_difference < 60: # If difference is less than 60 seconds
-                        selected_reminder = reminder
-                        print(f"Selected reminder by time: {selected_reminder}")
-                        break
-            except ValueError as e:
-                print(f"Error parsing selection_time_str for comparison: {e}")
-                pass 
-        
-        if selected_reminder:
-            # Now, based on action_type, transition to the correct confirmation flow
-            if action_type == "delete":
-                response = {
-                    "fulfillmentText": f"You want to delete the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. Confirm delete?",
-                    "outputContexts": [
-                        {
-                            "name": f"{session_id}/contexts/{context_name}",
-                            "lifespanCount": 0 # Clear the selection context
-                        },
-                        {
-                            "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
-                            "lifespanCount": 2, 
-                            "parameters": {
-                                "reminder_id_to_delete": selected_reminder['id'],
-                                "reminder_task_found": selected_reminder['task'],
-                                "reminder_time_found": selected_reminder['time']
-                            }
+        # Safety check for selection_index
+        try:
+            selection_index = int(selection_index)
+        except (ValueError, TypeError):
+            return jsonify({
+                "fulfillmentText": "I didn’t catch which one you want to update. Please reply with a number like 1 or 2."
+            })
+        if selection_index is not None and 1 <= selection_index <= len(reminders_list):
+            selected_reminder = reminders_list[selection_index - 1]
+            response = {
+                "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {selected_reminder['time']}. What's the new time?",
+                "outputContexts": [
+                    {
+                        "name": f"{session_id}/contexts/awaiting_update_time",
+                        "lifespanCount": 2,
+                        "parameters": {
+                            "reminder_id_to_update": selected_reminder['id'],
+                            "reminder_task_found": selected_reminder['task'],
+                            "reminder_old_time_found": selected_reminder['time']
                         }
-                    ]
-                }
-                print("Transitioning to deletion confirmation.")
-                return jsonify(response)
-            elif action_type == "update" and new_time_iso_str_for_update:
-                # Need to convert new_time_iso_str_for_update for formatted display
-                new_dt_obj_for_display = datetime.fromisoformat(new_time_iso_str_for_update)
-                new_time_formatted = new_dt_obj_for_display.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-
-                response = {
-                    "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {selected_reminder['time']} to {new_time_formatted}. Confirm update?",
-                    "outputContexts": [
-                        {
-                            "name": f"{session_id}/contexts/{context_name}",
-                            "lifespanCount": 0 # Clear the selection context
-                        },
-                        {
-                            "name": f"{session_id}/contexts/awaiting_update_confirmation",
-                            "lifespanCount": 2, 
-                            "parameters": {
-                                "reminder_id_to_update": selected_reminder['id'],
-                                "reminder_task_found": selected_reminder['task'],
-                                "reminder_old_time_found": selected_reminder['time'], # Store selected reminder's old time
-                                "reminder_new_time_desired_iso_str": new_time_iso_str_for_update,
-                                "reminder_new_time_desired_formatted": new_time_formatted
-                            }
-                        }
-                    ]
-                }
-                print("Transitioning to update confirmation.")
-                return jsonify(response)
-            elif action_type == "update_no_time": # FIX: Handle the new action_type
-                response = {
-                    "fulfillmentText": f"You've selected the '{selected_reminder['task']}' reminder. What's the new time you'd like to set it to?",
-                    "outputContexts": [
-                        {
-                            "name": f"{session_id}/contexts/{context_name}",
-                            "lifespanCount": 0 # Clear the selection context
-                        },
-                        {
-                            "name": f"{session_id}/contexts/awaiting_update_time",
-                            "lifespanCount": 2, 
-                            "parameters": {
-                                "reminder_id_to_update": selected_reminder['id'],
-                                "reminder_task_found": selected_reminder['task'],
-                                "reminder_old_time_found": selected_reminder['time']
-                                # new_time_iso_str_for_update is NOT passed here as user hasn't provided it yet
-                            }
-                        }
-                    ]
-                }
-                print("Transitioning to ask for new time for selected reminder (update_no_time).")
-                return jsonify(response)
-            else:
-                return jsonify({
-                    "fulfillmentText": "I'm sorry, I couldn't determine the action you want to perform for the selected reminder."
-                })
+                    }
+                ]
+            }
+            return jsonify(response)
         else:
             return jsonify({
                 "fulfillmentText": "I couldn't identify which reminder you meant. Please choose a number from the list or try specifying the time more precisely."
