@@ -281,89 +281,53 @@ def webhook():
             })
     
     # Handle PostGameChatIntent - Chat after a game result
-    elif intent_display_name == 'PostGameChatIntent':
-        user_message = req.get('queryResult', {}).get('queryText', '').lower()
-        
-        # Enhanced game detection - look for various ways users might ask to chat about games
-        game_chat_keywords = [
-            'chat with me', 'talk about', 'discuss', 'tell me about', 'how did i do',
-            'my performance', 'my score', 'my result', 'how was i', 'how did i perform',
-            'chat about', 'talk about my game', 'discuss my game', 'my game result'
-        ]
-        
-        # Check if user is asking to chat about games
-        is_game_chat_request = any(keyword in user_message for keyword in game_chat_keywords)
-        
-        # Check if the user message contains direct game result information
-        direct_game_keywords = ['completed', 'finished', 'score', 'level', 'memory match', 'stroop effect', 'pairs', 'rounds']
-        has_direct_game_info = any(keyword in user_message for keyword in direct_game_keywords)
-        
-        game_info = ""
-        
-        # Priority 1: Check for game context in parameters (from frontend button)
-        parameters = req.get('queryResult', {}).get('parameters', {})
-        if parameters.get('game_context'):
-            game_info = parameters.get('game_context')
-        # Priority 2: Direct game info in current message
-        elif has_direct_game_info:
-            game_info = req.get('queryResult', {}).get('queryText', '')
-        
-        # Priority 2: Check conversation history for recent game results (last 10 messages)
-        elif is_game_chat_request:
-            history = CONVERSATION_HISTORY[session_id]
-            recent_messages = list(history)[-10:]  # Get last 10 messages
-            
-            for msg in reversed(recent_messages):
-                if msg['role'] == 'user':
-                    content = msg['content'].lower()
-                    # Look for game-related content
-                    if any(keyword in content for keyword in ['memory match', 'stroop effect', 'score', 'pairs', 'rounds', 'completed', 'finished']):
-                        game_info = msg['content']
-                        break
-        
-        # Priority 3: Check for any recent game mentions in conversation
-        if not game_info:
-            history = CONVERSATION_HISTORY[session_id]
-            for msg in reversed(history):
-                if msg['role'] == 'user':
-                    content = msg['content'].lower()
-                    if any(keyword in content for keyword in ['game', 'played', 'memory', 'stroop', 'score', 'level']):
-                        game_info = msg['content']
-                        break
+    elif intent_display_name == "PostGameChatIntent":
+        # Get user's message
+        user_input = req.get("queryResult", {}).get("queryText", "").lower()
 
-        # Compose a prompt for OpenAI
-        if game_info:
-            openai_prompt = (
-                f"The user wants to chat about a game they played. Here's what I know about their game: {game_info}\n"
-                f"They said: '{req.get('queryResult', {}).get('queryText', '')}'\n"
-                "Reply as Kiki, a warm, supportive companion. If you can identify their game performance, "
-                "reference their specific results and encourage them. Ask a friendly follow-up question about "
-                "their experience or if they'd like to play again. If the game details are unclear, "
-                "be encouraging and ask about their gaming experience."
-            )
-            ai_response = get_openai_response(openai_prompt, session_id, max_words=50)
+        # Determine game context based on recent message
+        conversation = req.get("queryResult", {}).get("text", "")
+        game_context = ""
+
+        # Try to infer which game the user played recently
+        if "stroop" in user_input or "stroop" in conversation:
+            game_context = "Stroop Effect"
+        elif "memory" in user_input or "memory match" in conversation:
+            game_context = "Memory Match"
+
+        # Build OpenAI prompt
+        if game_context:
+            system_prompt = f"You are Kiki, a warm and encouraging chatbot companion. The user just finished playing the {game_context} game. Start a friendly conversation reflecting on the experience."
+            user_prompt = f"Let's chat about my {game_context} game."
         else:
-            # Enhanced generic response for game chat requests
-            if is_game_chat_request:
-                openai_prompt = (
-                    f"The user wants to chat about a game they played, but I don't have specific details. "
-                    f"They said: '{req.get('queryResult', {}).get('queryText', '')}'\n"
-                    "Reply as Kiki, a warm, supportive companion. Be encouraging about their gaming experience. "
-                    "Ask what game they played, how they felt about it, or if they'd like to try another game. "
-                    "Keep the conversation friendly and engaging."
-                )
-            else:
-                openai_prompt = (
-                    f"The user said: '{req.get('queryResult', {}).get('queryText', '')}'\n"
-                    "Reply as Kiki, a warm, supportive companion. Be encouraging and ask if they'd like to "
-                    "play a game, set a reminder, or chat about something else."
-                )
-            ai_response = get_openai_response(openai_prompt, session_id)
+            system_prompt = "You are Kiki, a kind and supportive chatbot who encourages users after mental games."
+            user_prompt = "Let's talk about the game I just played."
 
-        return jsonify({
-            "fulfillmentText": ai_response,
-            "outputContexts": [set_chat_mode_context(session_id)]
-        })
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+                max_tokens=150,
+                temperature=0.9
+            )
+
+            reply = response.choices[0].message.content.strip()
+            return jsonify({
+                "fulfillmentText": reply,
+                "outputContexts": [set_chat_mode_context(session_id)]
+            })
+        except Exception as e:
+            print(f"OpenAI API error in PostGameChatIntent: {e}")
+            return jsonify({
+                "fulfillmentText": "I'd love to chat about your game! How did you feel while playing?",
+                "outputContexts": [set_chat_mode_context(session_id)]
+            })
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
     elif intent_display_name == 'FallbackDuringChatIntent':
         chat_mode_active = is_chat_mode_active(req)
