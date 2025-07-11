@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytz
 import openai  # Add this import at the top with other imports
 from dateutil import parser
+from collections import defaultdict, deque
 
 # --- START CREDENTIALS SETUP FOR RENDER ---
 firebase_key_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
@@ -41,14 +42,28 @@ OPENAI_MODEL = "gpt-3.5-turbo"
 KIKI_SYSTEM_PROMPT = """You are Kiki, a warm, friendly, and supportive AI companion designed specifically for elderly users. 
 
 Your personality:
-- Speak simply and warmly like a caring friend or grandchild
-- Be patient, empathetic, and encouraging
-- Use simple language and avoid technical terms
-- Show genuine interest in their well-being and daily life
-- Provide emotional support and light companionship
+- Speak like a caring friend or grandchild - warm, simple, and natural
+- Be genuinely interested in their day, feelings, and experiences
+- Use everyday language that's easy to understand
+- Show empathy and emotional support
+- Be encouraging and positive, but also realistic
 
-When asked "Who are you?" or "What can you do?", explain:
-"I'm Kiki, your friendly virtual companion! I'm here to chat with you, play fun games, or help remind you of things like taking medicine. I love hearing about your day and being here for you."
+When asked about yourself, you can say:
+"I'm Kiki, your friendly companion! I love chatting with you, playing games, and helping with reminders. I'm here to keep you company and make your day a bit brighter."
+
+Response guidelines:
+- Keep responses to 1-2 key sentences for clarity and pacing
+- Be concise but warm - avoid long explanations
+- Always include a natural follow-up question to keep conversation flowing
+- Use simple, everyday small talk questions like:
+  * "Have you had your tea yet?"
+  * "Did you get some rest today?"
+  * "How's your day going so far?"
+  * "What have you been up to?"
+  * "Are you feeling comfortable?"
+  * "Did you enjoy your breakfast?"
+  * "Have you been outside today?"
+  * "How are you feeling right now?"
 
 Important guidelines:
 - Vary your responses naturally - don't be repetitive
@@ -59,66 +74,54 @@ Important guidelines:
 - Keep responses 2-4 sentences, but vary the length
 - Use emojis occasionally to add warmth (😊, 💕, 🌟, etc.)
 
-Remember: You're not a medical professional or technical support. You're a friendly companion who provides emotional support and casual conversation."""
+Remember: You're a friendly companion, not a medical professional. Focus on emotional support and casual conversation."""
 
-def get_openai_response(user_message, session_id, max_words=50):
+# In-memory conversation history tracker (per session)
+CONVERSATION_HISTORY = defaultdict(lambda: deque(maxlen=6))
+
+def get_openai_response(user_message, session_id, max_words=35):
     """
-    Get a response from OpenAI for chat interactions.
+    Get a response from OpenAI for chat interactions, using conversation history for context.
     Returns the AI response or a fallback message if there's an error.
-    
-    Args:
-        user_message (str): The user's message
-        session_id (str): The session ID
-        max_words (int): Maximum number of words in response (default: 50)
     """
     if not OPENAI_API_KEY:
         return "I'm having trouble connecting to my chat features right now. Let me help you with reminders or games instead!"
     
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        
+        # Add user message to history
+        CONVERSATION_HISTORY[session_id].append({'role': 'user', 'content': user_message})
+        # Build message list for OpenAI
+        messages = [{"role": "system", "content": KIKI_SYSTEM_PROMPT}]
+        messages.extend(CONVERSATION_HISTORY[session_id])
         # Estimate tokens needed (roughly 1.3 words per token for English)
         estimated_tokens = int(max_words * 1.3) + 50  # Add buffer for safety
-        
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": KIKI_SYSTEM_PROMPT},
-                {"role": "user", "content": user_message}
-            ],
+            messages=messages,
             max_tokens=estimated_tokens,  # Dynamic token limit based on word count
             temperature=0.9,  # Higher creativity for more varied responses
             presence_penalty=0.1,  # Slight penalty to avoid repetition
             frequency_penalty=0.1   # Slight penalty to avoid repetitive phrases
         )
-        
         ai_response = response.choices[0].message.content.strip()
-        
+        # Add assistant reply to history
+        CONVERSATION_HISTORY[session_id].append({'role': 'assistant', 'content': ai_response})
         # Truncate to max_words if needed
         words = ai_response.split()
         if len(words) > max_words:
-            # Try to end at a complete sentence
             truncated_words = words[:max_words]
             truncated_response = ' '.join(truncated_words)
-            
-            # Find the last complete sentence
             last_period = truncated_response.rfind('.')
             last_exclamation = truncated_response.rfind('!')
             last_question = truncated_response.rfind('?')
-            
             last_sentence_end = max(last_period, last_exclamation, last_question)
-            
             if last_sentence_end > 0:
-                # End at the last complete sentence
                 final_response = truncated_response[:last_sentence_end + 1]
             else:
-                # If no sentence ending found, just truncate
                 final_response = truncated_response
-            
             return final_response
-        
         return ai_response
-        
     except Exception as e:
         print(f"OpenAI API error: {e}")
         return "I'm having a little trouble thinking right now. Let me help you with reminders or games instead!"
@@ -1424,6 +1427,72 @@ def webhook():
                                         {
                                             "simpleResponse": {
                                                 "textToSpeech": "I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?"
+                                            }
+                                        }
+                                    ],
+                                    "suggestions": [
+                                        {"title": "Set a reminder"},
+                                        {"title": "Play a game"},
+                                        {"title": "Chat with me"}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            })
+
+    # Handle ExitChatIntent - Exit chat mode gracefully
+    elif intent_display_name == 'ExitChatIntent':
+        if is_chat_mode_active(req):
+            # Clear conversation history for this session
+            CONVERSATION_HISTORY.pop(session_id, None)
+            return jsonify({
+                "fulfillmentText": "Of course! I'm here whenever you want to chat again. What would you like to do? Set a reminder, play a game, or something else?",
+                "fulfillmentMessages": [
+                    {
+                        "text": {"text": ["Of course! I'm here whenever you want to chat again. What would you like to do? Set a reminder, play a game, or something else?"]},
+                        "platform": "ACTIONS_ON_GOOGLE"
+                    },
+                    {
+                        "payload": {
+                            "google": {
+                                "richResponse": {
+                                    "items": [
+                                        {
+                                            "simpleResponse": {
+                                                "textToSpeech": "Of course! I'm here whenever you want to chat again. What would you like to do? Set a reminder, play a game, or something else?"
+                                            }
+                                        }
+                                    ],
+                                    "suggestions": [
+                                        {"title": "Set a reminder"},
+                                        {"title": "Play a game"},
+                                        {"title": "Chat with me"}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ],
+                "outputContexts": [clear_chat_mode_context(session_id)]
+            })
+        else:
+            return jsonify({
+                "fulfillmentText": "What would you like to do? Set a reminder, play a game, or chat with me?",
+                "fulfillmentMessages": [
+                    {
+                        "text": {"text": ["What would you like to do? Set a reminder, play a game, or chat with me?"]},
+                        "platform": "ACTIONS_ON_GOOGLE"
+                    },
+                    {
+                        "payload": {
+                            "google": {
+                                "richResponse": {
+                                    "items": [
+                                        {
+                                            "simpleResponse": {
+                                                "textToSpeech": "What would you like to do? Set a reminder, play a game, or chat with me?"
                                             }
                                         }
                                     ],
