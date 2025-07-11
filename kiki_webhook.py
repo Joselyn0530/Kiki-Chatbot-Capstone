@@ -307,6 +307,54 @@ def webhook():
             "fulfillmentText": ai_response,
             "outputContexts": [set_chat_mode_context(session_id)]
         })
+    
+    # Handle PostGameOptionsMemoryMatch - Show chips after Memory Match
+    elif intent_display_name == 'PostGameOptionsMemoryMatch':
+        return jsonify({
+            "fulfillmentText": "What would you like to do next?",
+            "fulfillmentMessages": [
+                {
+                    "payload": {
+                        "richContent": [
+                            [
+                                {
+                                    "type": "chips",
+                                    "options": [
+                                        {"text": "Play Again"},
+                                        {"text": "Try Another Game"},
+                                        {"text": "Chat About My Performance"}
+                                    ]
+                                }
+                            ]
+                        ]
+                    }
+                }
+            ]
+        })
+    
+    # Handle PostGameOptionsStroopEffect - Show chips after Stroop Effect
+    elif intent_display_name == 'PostGameOptionsStroopEffect':
+        return jsonify({
+            "fulfillmentText": "What would you like to do next?",
+            "fulfillmentMessages": [
+                {
+                    "payload": {
+                        "richContent": [
+                            [
+                                {
+                                    "type": "chips",
+                                    "options": [
+                                        {"text": "Play Again"},
+                                        {"text": "Try Another Game"},
+                                        {"text": "Chat About My Performance"}
+                                    ]
+                                }
+                            ]
+                        ]
+                    }
+                }
+            ]
+        })
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
     elif intent_display_name == 'FallbackDuringChatIntent':
         chat_mode_active = is_chat_mode_active(req)
