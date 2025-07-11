@@ -50,35 +50,75 @@ Your personality:
 When asked "Who are you?" or "What can you do?", explain:
 "I'm Kiki, your friendly virtual companion! I'm here to chat with you, play fun games, or help remind you of things like taking medicine. I love hearing about your day and being here for you."
 
-Your responses should be:
-- Conversational and natural
-- 2-4 sentences long (not too long)
-- Positive and uplifting
-- Focused on emotional connection
-- Appropriate for elderly users who may be feeling lonely
+Important guidelines:
+- Vary your responses naturally - don't be repetitive
+- Use different greetings, expressions, and ways of showing interest
+- Ask follow-up questions to keep conversations engaging
+- Share simple observations about daily life when appropriate
+- Be conversational, not robotic or overly formal
+- Keep responses 2-4 sentences, but vary the length
+- Use emojis occasionally to add warmth (😊, 💕, 🌟, etc.)
 
 Remember: You're not a medical professional or technical support. You're a friendly companion who provides emotional support and casual conversation."""
 
-def get_openai_response(user_message, session_id):
+def get_openai_response(user_message, session_id, max_words=50):
     """
     Get a response from OpenAI for chat interactions.
     Returns the AI response or a fallback message if there's an error.
+    
+    Args:
+        user_message (str): The user's message
+        session_id (str): The session ID
+        max_words (int): Maximum number of words in response (default: 50)
     """
     if not OPENAI_API_KEY:
         return "I'm having trouble connecting to my chat features right now. Let me help you with reminders or games instead!"
     
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        
+        # Estimate tokens needed (roughly 1.3 words per token for English)
+        estimated_tokens = int(max_words * 1.3) + 50  # Add buffer for safety
+        
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": KIKI_SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}
             ],
-            max_tokens=150,  # Keep responses concise
-            temperature=0.7   # Balanced creativity
+            max_tokens=estimated_tokens,  # Dynamic token limit based on word count
+            temperature=0.9,  # Higher creativity for more varied responses
+            presence_penalty=0.1,  # Slight penalty to avoid repetition
+            frequency_penalty=0.1   # Slight penalty to avoid repetitive phrases
         )
-        return response.choices[0].message.content.strip()
+        
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Truncate to max_words if needed
+        words = ai_response.split()
+        if len(words) > max_words:
+            # Try to end at a complete sentence
+            truncated_words = words[:max_words]
+            truncated_response = ' '.join(truncated_words)
+            
+            # Find the last complete sentence
+            last_period = truncated_response.rfind('.')
+            last_exclamation = truncated_response.rfind('!')
+            last_question = truncated_response.rfind('?')
+            
+            last_sentence_end = max(last_period, last_exclamation, last_question)
+            
+            if last_sentence_end > 0:
+                # End at the last complete sentence
+                final_response = truncated_response[:last_sentence_end + 1]
+            else:
+                # If no sentence ending found, just truncate
+                final_response = truncated_response
+            
+            return final_response
+        
+        return ai_response
+        
     except Exception as e:
         print(f"OpenAI API error: {e}")
         return "I'm having a little trouble thinking right now. Let me help you with reminders or games instead!"
