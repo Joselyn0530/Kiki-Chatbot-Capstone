@@ -429,47 +429,46 @@ def webhook():
                 dt_str = extract_datetime_str(date_time_str)
                 reminder_dt_obj = datetime.fromisoformat(str(dt_str))
 
-            reminder_data = {
-                'task': task,
-                'remind_at': reminder_dt_obj,
-                'status': 'pending',
-                'created_at': firestore.SERVER_TIMESTAMP
-            }
-            db.collection('reminders').add(reminder_data)
-            print(f"Reminder saved to Firestore: {reminder_data}")
+                reminder_data = {
+                    'task': task,
+                    'remind_at': reminder_dt_obj,
+                    'status': 'pending',
+                    'created_at': firestore.SERVER_TIMESTAMP
+                }
+                db.collection('reminders').add(reminder_data)
+                print(f"Reminder saved to Firestore: {reminder_data}")
 
-            user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
 
-            response = {
-                "fulfillmentMessages": [
-                        {"text": {"text": [f"Got it! I'll remind you to {task} at {user_friendly_time_str}."]}
-                    }
-                    ],
-                    "outputContexts": [
-                        {
-                            "name": f"{req['session']}/contexts/await_task",
-                            "lifespanCount": 0,
-                            "parameters": {}
-                        },
-                        {
-                            "name": f"{req['session']}/contexts/await_time",
-                            "lifespanCount": 0,
-                            "parameters": {}
-                        }
-                    ] + clear_all_update_contexts(session_id)
-            }
-            return jsonify(response)
+                response = {
+                    "fulfillmentMessages": [
+                            {"text": {"text": [f"Got it! I'll remind you to {task} at {user_friendly_time_str}."]}}
+                        ],
+                        "outputContexts": [
+                            {
+                                "name": f"{req['session']}/contexts/await_task",
+                                "lifespanCount": 0,
+                                "parameters": {}
+                            },
+                            {
+                                "name": f"{req['session']}/contexts/await_time",
+                                "lifespanCount": 0,
+                                "parameters": {}
+                            }
+                        ] + clear_all_update_contexts(session_id)
+                }
+                return jsonify(response)
 
-        except ValueError as e:
-            print(f"Date parsing error: {e}")
-            return jsonify({
-                "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
-            })
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
-            return jsonify({
-                "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
-            })
+            except ValueError as e:
+                print(f"Date parsing error: {e}")
+                return jsonify({
+                    "fulfillmentText": "I had trouble understanding the time. Please use a clear format like 'tomorrow at 2 PM'."
+                })
+            except Exception as e:
+                print(f"An unexpected error occurred: {e}")
+                return jsonify({
+                    "fulfillmentText": "I'm sorry, something went wrong while trying to set your reminder. Please try again later."
+                })
 
     # Handle delete.reminder intent (initial request to find and confirm)
     elif intent_display_name == 'delete.reminder': 
@@ -904,71 +903,75 @@ def webhook():
             if old_date_time_str:
                 # If a specific old time is given, filter by time window
                 try:
-                    if old_date_time_str:
-                old_dt_obj = datetime.fromisoformat(old_date_time_str)
-                    else:
-                        return jsonify({
-                            "fulfillmentText": "I couldn't understand the current time. Please use a clear format like '4pm' or '2 PM'."
-                        })
-                time_window_start = old_dt_obj - timedelta(minutes=1)
-                time_window_end = old_dt_obj + timedelta(minutes=1)
-                query = query.where('remind_at', '>=', time_window_start) \
-                             .where('remind_at', '<=', time_window_end)
-                
-                # Try to get only one if old time is specified, to match exact
-                docs = query.limit(1).get()
+                    old_dt_obj = datetime.fromisoformat(old_date_time_str)
+                    time_window_start = old_dt_obj - timedelta(minutes=1)
+                    time_window_end = old_dt_obj + timedelta(minutes=1)
+                    query = query.where('remind_at', '>=', time_window_start) \
+                                 .where('remind_at', '<=', time_window_end)
+                    
+                    # Try to get only one if old time is specified, to match exact
+                    docs = query.limit(1).get()
 
-                if docs:
-                    reminder_doc = next(iter(docs))
-                    reminder_id = reminder_doc.id
-                    reminder_data = reminder_doc.to_dict()
+                    if docs:
+                        reminder_doc = next(iter(docs))
+                        reminder_id = reminder_doc.id
+                        reminder_data = reminder_doc.to_dict()
 
-                    # Format old and new times for user-friendly display in local timezone
-                    user_friendly_old_time_str = reminder_data['remind_at'].astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                        try:
-                            if new_date_time_str:
-                    new_dt_obj = datetime.fromisoformat(new_date_time_str)
-                    user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                            else:
+                        # Format old and new times for user-friendly display in local timezone
+                        user_friendly_old_time_str = reminder_data['remind_at'].astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                        
+                        if new_date_time_str:
+                            try:
+                                new_dt_obj = datetime.fromisoformat(new_date_time_str)
+                                user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                                
+                                session_id = req['session']
+                                response = {
+                                    "fulfillmentText": f"I found your reminder to '{task_to_update}' at {user_friendly_old_time_str}. Do you want to change it to {user_friendly_new_time_str}?",
+                                    "outputContexts": [
+                                        {
+                                            "name": f"{session_id}/contexts/awaiting_update_confirmation",
+                                            "lifespanCount": 2, 
+                                            "parameters": {
+                                                "reminder_id_to_update": reminder_id,
+                                                "reminder_task_found": task_to_update,
+                                                "reminder_old_time_found": user_friendly_old_time_str, 
+                                                "reminder_new_time_desired_iso_str": new_date_time_str,
+                                                "reminder_new_time_desired_formatted": user_friendly_new_time_str
+                                            }
+                                        }
+                                    ]
+                                }
+                                print(f"Found specific reminder {reminder_id} for update. Awaiting confirmation.")
+                                return jsonify(response)
+                            except Exception as e:
+                                print(f"Error parsing new time: {e}")
                                 return jsonify({
                                     "fulfillmentText": f"I couldn't understand the new time '{new_date_time_str}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
                                 })
-                    session_id = req['session']
-                    response = {
-                        "fulfillmentText": f"I found your reminder to '{task_to_update}' at {user_friendly_old_time_str}. Do you want to change it to {user_friendly_new_time_str}?",
-                        "outputContexts": [
-                            {
-                                "name": f"{session_id}/contexts/awaiting_update_confirmation",
-                                "lifespanCount": 2, 
-                                "parameters": {
-                                    "reminder_id_to_update": reminder_id,
-                                    "reminder_task_found": task_to_update,
-                                    "reminder_old_time_found": user_friendly_old_time_str, 
-                                    "reminder_new_time_desired_iso_str": new_date_time_str,
-                                    "reminder_new_time_desired_formatted": user_friendly_new_time_str
-                                }
+                        else:
+                            # No new time provided, ask for the new time
+                            session_id = req['session']
+                            response = {
+                                "fulfillmentText": f"I found your reminder to '{task_to_update}' at {user_friendly_old_time_str}. Sure. What's the new time for your reminder?",
+                                "outputContexts": [
+                                    {
+                                        "name": f"{session_id}/contexts/awaiting_update_time",
+                                        "lifespanCount": 2,
+                                        "parameters": {
+                                            "reminder_id_to_update": reminder_id,
+                                            "reminder_task_found": task_to_update,
+                                            "reminder_old_time_found": user_friendly_old_time_str
+                                        }
+                                    }
+                                ]
                             }
-                        ]
-                    }
-                    print(f"Found specific reminder {reminder_id} for update. Awaiting confirmation.")
-                    return jsonify(response)
-                        except Exception as e:
-                            print(f"Error parsing new time: {e}")
-                            return jsonify({
-                                "fulfillmentText": f"I couldn't understand the new time '{new_date_time_str}'. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
-                            })
-                else:
-                        try:
-                    old_dt_obj = datetime.fromisoformat(old_date_time_str)
-                    user_friendly_old_time_str = old_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-                    return jsonify({
-                        "fulfillmentText": f"I couldn't find a pending reminder to '{task_to_update}' at {user_friendly_old_time_str}. Please make sure the task and current time are correct."
-                            })
-                        except Exception as e:
-                            print(f"Unexpected error in old_date_time_str parsing (task-specific, branch 3): {e}")
-                            return jsonify({
-                                "fulfillmentText": "Sorry, something went wrong while processing your request. Please try again."
-                            })
+                            return jsonify(response)
+                    else:
+                        user_friendly_old_time_str = old_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                        return jsonify({
+                            "fulfillmentText": f"I couldn't find a pending reminder to '{task_to_update}' at {user_friendly_old_time_str}. Please make sure the task and current time are correct."
+                        })
                 except ValueError as e:
                     print(f"Error parsing old date time: {e}")
                     return jsonify({
@@ -999,32 +1002,32 @@ def webhook():
             
             elif len(found_reminders) == 1:
                 # Exactly one reminder found
-                    reminder = found_reminders[0]
-                    session_id = req['session']
-                    
+                reminder = found_reminders[0]
+                session_id = req['session']
+                
                 if new_date_time_str:
                     # New time provided, proceed to confirmation
                     try:
-                    new_dt_obj = datetime.fromisoformat(new_date_time_str)
-                    user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
+                        new_dt_obj = datetime.fromisoformat(new_date_time_str)
+                        user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
 
-                    response = {
+                        response = {
                             "fulfillmentText": f"I found your reminder to '{reminder['task']}' at {user_friendly_time(reminder['remind_at'])}. Do you want to change it to {user_friendly_new_time_str}?",
-                        "outputContexts": [
-                            {
-                                "name": f"{session_id}/contexts/awaiting_update_confirmation",
-                                "lifespanCount": 2, 
-                                "parameters": {
-                                    "reminder_id_to_update": reminder['id'],
-                                    "reminder_task_found": reminder['task'],
+                            "outputContexts": [
+                                {
+                                    "name": f"{session_id}/contexts/awaiting_update_confirmation",
+                                    "lifespanCount": 2, 
+                                    "parameters": {
+                                        "reminder_id_to_update": reminder['id'],
+                                        "reminder_task_found": reminder['task'],
                                         "reminder_old_time_found": user_friendly_time(reminder['remind_at']), 
-                                    "reminder_new_time_desired_iso_str": new_date_time_str,
-                                    "reminder_new_time_desired_formatted": user_friendly_new_time_str
+                                        "reminder_new_time_desired_iso_str": new_date_time_str,
+                                        "reminder_new_time_desired_formatted": user_friendly_new_time_str
+                                    }
                                 }
-                            }
-                        ]
-                    }
-                    print(f"Found unique reminder {reminder['id']} for update. Awaiting confirmation.")
+                            ]
+                        }
+                        print(f"Found unique reminder {reminder['id']} for update. Awaiting confirmation.")
                         return jsonify(response)
                     except ValueError as e:
                         print(f"Error parsing new time: {e}")
@@ -1050,23 +1053,23 @@ def webhook():
                     print(f"Found unique reminder {reminder['id']} for update. Asking for new time.")
                     return jsonify(response)
 
-                elif len(found_reminders) > 1:
+            elif len(found_reminders) > 1:
                 # Multiple reminders found, show rich content for selection
                 clarification_reminders_data = []
                 rich_content_items = []
 
-                    for i, reminder in enumerate(found_reminders):
+                for i, reminder in enumerate(found_reminders):
                     rich_content_items.append({
                         "type": "info",
                         "title": f"{i+1}. {reminder['task'].capitalize()}",
                         "subtitle": f"at {user_friendly_time(reminder['remind_at'])}"
                     })
-                        clarification_reminders_data.append({
-                            'id': reminder['id'],
-                            'task': reminder['task'],
+                    clarification_reminders_data.append({
+                        'id': reminder['id'],
+                        'task': reminder['task'],
                         'time': user_friendly_time(reminder['remind_at']),
                         'time_raw': reminder['remind_at']
-                        })
+                    })
 
                 # Add prompt as a description card
                 rich_content_items.append({
@@ -1076,8 +1079,8 @@ def webhook():
                     ]
                 })
 
-                    session_id = req['session']
-                    response = {
+                session_id = req['session']
+                response = {
                     "fulfillmentMessages": [
                         {
                             "payload": {
@@ -1085,18 +1088,18 @@ def webhook():
                             }
                         }
                     ],
-                        "outputContexts": [
-                            {
+                    "outputContexts": [
+                        {
                             "name": f"{session_id}/contexts/awaiting_update_selection",
                             "lifespanCount": 2,
-                                "parameters": {
+                            "parameters": {
                                 "reminders_list": json.dumps(clarification_reminders_data),
                                 "action_type": "update_no_time" # New action type
-                                }
                             }
-                        ]
-                    }
-                    return jsonify(response)
+                        }
+                    ]
+                }
+                return jsonify(response)
 
         except ValueError as e:
             print(f"Date parsing error in update (should not happen if no old_date_time_str): {e}")
@@ -1125,16 +1128,16 @@ def webhook():
 
                 if doc.exists:
                     doc_ref.update({
-                    'remind_at': new_dt_obj_for_update
-                })
-                print(f"Reminder (ID: {reminder_id_to_update}) confirmed and updated to {new_dt_obj_for_update}.")
+                        'remind_at': new_dt_obj_for_update
+                    })
+                    print(f"Reminder (ID: {reminder_id_to_update}) confirmed and updated to {new_dt_obj_for_update}.")
 
-                session_id = req['session']
-                response = {
-                    "fulfillmentText": f"Okay, I've successfully changed your reminder to '{reminder_task_found}' to {reminder_new_time_desired_formatted}.",
+                    session_id = req['session']
+                    response = {
+                        "fulfillmentText": f"Okay, I've successfully changed your reminder to '{reminder_task_found}' to {reminder_new_time_desired_formatted}.",
                         "outputContexts": clear_all_update_contexts(session_id)
-                }
-                return jsonify(response)
+                    }
+                    return jsonify(response)
                 else:
                     print(f"Attempted to update reminder {reminder_id_to_update} but it doesn't exist.")
                     return jsonify({
@@ -1218,7 +1221,17 @@ def webhook():
                     }
                 ]
             }
-        return jsonify(response)
+            return jsonify(response)
+        except ValueError as e:
+            print(f"Error parsing new time: {e}")
+            return jsonify({
+                "fulfillmentText": f"Sorry, I couldn't understand the time you gave. Please try saying it like 'at 5pm today' or 'tomorrow at 8am'."
+            })
+        except Exception as e:
+            print(f"Error processing update time: {e}")
+            return jsonify({
+                "fulfillmentText": "I had trouble understanding the time. Please use a clear format like '5pm' or 'tomorrow at 2 PM'."
+            })
 
         except ValueError as e:
             print(f"Error parsing new time: {e}")
@@ -1256,21 +1269,21 @@ def webhook():
             })
         if selection_index is not None and 1 <= selection_index <= len(reminders_list):
             selected_reminder = reminders_list[selection_index - 1]
-                response = {
+            response = {
                 "fulfillmentText": f"You want to change the reminder to '{selected_reminder['task']}' at {user_friendly_time(selected_reminder['time'])}. What's the new time?",
-                    "outputContexts": [
-                        {
+                "outputContexts": [
+                    {
                         "name": f"{session_id}/contexts/awaiting_update_time",
-                            "lifespanCount": 2, 
-                            "parameters": {
+                        "lifespanCount": 2, 
+                        "parameters": {
                             "reminder_id_to_update": selected_reminder['id'],
-                                "reminder_task_found": selected_reminder['task'],
+                            "reminder_task_found": selected_reminder['task'],
                             "reminder_old_time_found": user_friendly_time(selected_reminder['time'])
-                            }
                         }
-                    ]
-                }
-                return jsonify(response)
+                    }
+                ]
+            }
+            return jsonify(response)
         else:
             return jsonify({
                 "fulfillmentText": "I couldn't identify which reminder you meant. Please choose a number from the list or try specifying the time more precisely."
@@ -1418,13 +1431,13 @@ def webhook():
                 return jsonify({
                     "fulfillmentText": "Sorry, I couldn't save your reminder. Please try again."
                 })
-            else:
+        else:
             if task and (not date_time_str or not (isinstance(date_time_str, str) and date_time_str.strip())):
                 return jsonify({
                     "fulfillmentText": f"Great! What time should I remind you to {task}?"
                 })
-        else:
-            return jsonify({
+            else:
+                return jsonify({
                     "fulfillmentText": "Oops! I need both the task and the time. Could you try again?"
                 })
 
