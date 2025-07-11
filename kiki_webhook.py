@@ -280,54 +280,46 @@ def webhook():
                 ]
             })
     
-    # Handle PostGameChatIntent - Chat after a game result
-    elif intent_display_name == "PostGameChatIntent":
-        # Get user's message
-        user_input = req.get("queryResult", {}).get("queryText", "").lower()
-
-        # Determine game context based on recent message
-        conversation = req.get("queryResult", {}).get("text", "")
-        game_context = ""
-
-        # Try to infer which game the user played recently
-        if "stroop" in user_input or "stroop" in conversation:
-            game_context = "Stroop Effect"
-        elif "memory" in user_input or "memory match" in conversation:
-            game_context = "Memory Match"
-
-        # Build OpenAI prompt
-        if game_context:
-            system_prompt = f"You are Kiki, a warm and encouraging chatbot companion. The user just finished playing the {game_context} game. Start a friendly conversation reflecting on the experience."
-            user_prompt = f"Let's chat about my {game_context} game."
-        else:
-            system_prompt = "You are Kiki, a kind and supportive chatbot who encourages users after mental games."
-            user_prompt = "Let's talk about the game I just played."
+    # Handle PostGameChatMemoryIntent - Chat after Memory Match game
+    elif intent_display_name == "PostGameChatMemoryIntent":
+        system_prompt = "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it."
+        user_prompt = "Let's chat about my Memory Match game."
 
         try:
             client = openai.OpenAI(api_key=OPENAI_API_KEY)
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-
-            response = client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=messages,
-                max_tokens=150,
-                temperature=0.9
+            openai_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
             )
-
-            reply = response.choices[0].message.content.strip()
-            return jsonify({
-                "fulfillmentText": reply,
-                "outputContexts": [set_chat_mode_context(session_id)]
-            })
+            reply = openai_response.choices[0].message.content
+            return jsonify({"fulfillmentText": reply})
         except Exception as e:
-            print(f"OpenAI API error in PostGameChatIntent: {e}")
-            return jsonify({
-                "fulfillmentText": "I'd love to chat about your game! How did you feel while playing?",
-                "outputContexts": [set_chat_mode_context(session_id)]
-            })
+            print(f"OpenAI API error in PostGameChatMemoryIntent: {e}")
+            return jsonify({"fulfillmentText": "Great job playing Memory Match! How did you find the game? Did you enjoy matching the cards?"})
+
+    # Handle PostGameChatStroopIntent - Chat after Stroop Effect game
+    elif intent_display_name == "PostGameChatStroopIntent":
+        system_prompt = "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone."
+        user_prompt = "I just played the Stroop Effect game."
+
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            openai_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+            reply = openai_response.choices[0].message.content
+            return jsonify({"fulfillmentText": reply})
+        except Exception as e:
+            print(f"OpenAI API error in PostGameChatStroopIntent: {e}")
+            return jsonify({"fulfillmentText": "Well done on the Stroop Effect game! That's a tricky one that tests your focus. How did you find it?"})
+
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
     elif intent_display_name == 'FallbackDuringChatIntent':
         chat_mode_active = is_chat_mode_active(req)
