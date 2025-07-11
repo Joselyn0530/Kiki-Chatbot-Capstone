@@ -522,7 +522,7 @@ def webhook():
                                 "parameters": {
                                     "reminder_id_to_delete": reminder_id,
                                     "reminder_task_found": reminder_data['task'],
-                                    "reminder_time_found_str": actual_user_friendly_time_str,
+                                    "reminder_time_found_str": actual_user_friendly_time_str,  # <-- THIS LINE
                                     "reminder_time_found_raw": actual_iso_time_str
                                 }
                             }
@@ -653,7 +653,8 @@ def webhook():
                         "parameters": {
                             "reminder_id_to_delete": selected_reminder['id'],
                             "reminder_task_found": selected_reminder['task'],
-                            "reminder_time_found": user_friendly_time(selected_reminder['time'])
+                            "reminder_time_found_str": user_friendly_time(selected_reminder['time']),  # <-- THIS LINE
+                            "reminder_time_found_raw": selected_reminder['time_raw']
                         }
                     }
                 ]
@@ -675,7 +676,7 @@ def webhook():
             try:
                 db.collection('reminders').document(reminder_id_to_delete).delete()
                 return jsonify({
-                    "fulfillmentText": f"Your reminder to '{reminder_task_found}' at {reminder_time_found_str} has been deleted.",
+                    "fulfillmentText": f"Your reminder to '{reminder_task_found}'{f' at {reminder_time_found_str}' if reminder_time_found_str else ''} has been deleted.",
                     "outputContexts": [
                         {
                             "name": f"{session_id}/contexts/awaiting_deletion_confirmation",
