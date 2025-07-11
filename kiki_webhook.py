@@ -282,79 +282,77 @@ def webhook():
     
     # Handle PostGameChatIntent - Chat after a game result
     elif intent_display_name == 'PostGameChatIntent':
-        # Get the last game result from conversation history (if available)
-        history = CONVERSATION_HISTORY[session_id]
+        print("Received PostGameChatIntent.")
+        session_id = req['session']
+        query_text = req.get('queryResult', {}).get('queryText', '') # Get user's actual query (e.g., "how was that?")
+
         last_game_result = ""
-        for msg in reversed(history):
-            if msg['role'] == 'user' and ('score' in msg['content'].lower() or 'finished' in msg['content'].lower()):
-                last_game_result = msg['content']
-                break
+        # Search for structured game result in the conversation history
+        # Iterate in reverse to get the most recent game result
+        if session_id in CONVERSATION_HISTORY:
+            for msg in reversed(CONVERSATION_HISTORY[session_id]):
+                if msg['role'] == 'system' and '[RESULT]' in msg['content']:
+                    last_game_result = msg['content'] # e.g., "[RESULT] Game: Memory Match, Level: Easy, Score: 100, Time: 1:30"
+                    break
 
-        user_message = req.get('queryResult', {}).get('queryText', '')
+        # If PostGameChatIntent is used for general chat AND post-game chat
+        # Adapt Kiki's instructions based on whether a game result was found
+        kiki_specific_instructions = ""
+        user_message_for_prompt = ""
 
-        # Compose a prompt for OpenAI
         if last_game_result:
-            openai_prompt = (
-                f"The user just finished a game. Here is their result: {last_game_result}\n"
-                f"They said: {user_message}\n"
-                "Reply as Kiki, a warm, supportive companion. Reference their result, encourage them, and ask a friendly follow-up question."
+            # If a game result is available, prompt OpenAI to discuss it
+            kiki_specific_instructions = (
+                "You are discussing a recent game the user played. "
+                "Be encouraging, supportive, and empathetic regardless of the score. "
+                "Focus on effort and enjoyment. Ask open-ended questions like 'Did you enjoy that?' "
+                "or 'What was your favorite part?' or 'Would you like to play again?'. "
+                "Avoid making judgments about the score directly."
             )
-            ai_response = get_openai_response(openai_prompt, session_id)
+            # The user's query text might be "chat with me" or a follow-up about the game
+            user_message_for_prompt = f"User said: '{query_text if query_text else 'discuss the game.'}'"
+            full_prompt = (
+                f"{kiki_specific_instructions}\n\n"
+                f"Here is the last game result: {last_game_result}\n\n"
+                f"{user_message_for_prompt}"
+            )
         else:
-            ai_response = get_openai_response(user_message, session_id)
+            # If no game result, proceed with general chat mode (as per your existing logic)
+            kiki_specific_instructions = (
+                "You are Kiki, a warm, friendly, and supportive AI companion for elderly users. "
+                "Engage in natural, empathetic conversation. Ask about their day, offer encouragement, "
+                "or simply listen. Keep responses concise and comforting. Always maintain a positive and gentle tone."
+            )
+            user_message_for_prompt = f"User said: '{query_text}'"
+            full_prompt = f"{kiki_specific_instructions}\n\n{user_message_for_prompt}"
 
-        return jsonify({
-            "fulfillmentText": ai_response,
-            "outputContexts": [set_chat_mode_context(session_id)]
-        })
-    
-    # Handle PostGameOptionsMemoryMatch - Show chips after Memory Match
-    elif intent_display_name == 'PostGameOptionsMemoryMatch':
-        return jsonify({
-            "fulfillmentText": "What would you like to do next?",
-            "fulfillmentMessages": [
-                {
-                    "payload": {
-                        "richContent": [
-                            [
-                                {
-                                    "type": "chips",
-                                    "options": [
-                                        {"text": "Play Again"},
-                                        {"text": "Try Another Game"},
-                                        {"text": "Chat About My Performance"}
-                                    ]
-                                }
-                            ]
-                        ]
-                    }
-                }
-            ]
-        })
-    
-    # Handle PostGameOptionsStroopEffect - Show chips after Stroop Effect
-    elif intent_display_name == 'PostGameOptionsStroopEffect':
-        return jsonify({
-            "fulfillmentText": "What would you like to do next?",
-            "fulfillmentMessages": [
-                {
-                    "payload": {
-                        "richContent": [
-                            [
-                                {
-                                    "type": "chips",
-                                    "options": [
-                                        {"text": "Play Again"},
-                                        {"text": "Try Another Game"},
-                                        {"text": "Chat About My Performance"}
-                                    ]
-                                }
-                            ]
-                        ]
-                    }
-                }
-            ]
-        })
+        print(f"OpenAI Prompt for PostGameChatIntent: {full_prompt}")
+
+        try:
+            openai_response = openai.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": KIKI_SYSTEM_PROMPT},
+                    {"role": "user", "content": full_prompt}
+                ],
+                max_tokens=150
+            )
+            kiki_response_text = openai_response.choices[0].message.content.strip()
+            print(f"OpenAI Response for PostGameChatIntent: {kiki_response_text}")
+            
+            # Optionally, set the chat_mode context here if you want to keep the chat going
+            # set_chat_mode_context(session_id, 5) # Example: set lifespan for 5 turns
+            
+            return jsonify({
+                "fulfillmentText": kiki_response_text,
+                "outputContexts": [set_chat_mode_context(session_id, 5)] # Set context to stay in chat mode
+            })
+        except Exception as e:
+            print(f"Error calling OpenAI API for PostGameChatIntent: {e}")
+            return jsonify({
+                "fulfillmentText": "I had a little trouble processing that. Would you like to talk about something else?"
+            })
+            
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
     elif intent_display_name == 'FallbackDuringChatIntent':
         chat_mode_active = is_chat_mode_active(req)
@@ -1495,6 +1493,52 @@ def webhook():
                 return jsonify({
                     "fulfillmentText": "Oops! I need both the task and the time. Could you try again?"
                 })
+
+    # Handle GameResultWebhookIntent - Store structured game result
+    elif intent_display_name == 'GameResultWebhookIntent':
+        print("Received GameResultWebhookIntent.")
+        # Extract parameters directly from queryResult.parameters
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        
+        game = parameters.get('game')
+        score = parameters.get('score')
+        level = parameters.get('level')
+        time = parameters.get('time') # This will be the string like "3 seconds"
+
+        # Validate extracted data (optional, but good practice)
+        if not all([game, score, level, time]):
+            print(f"Missing game result data: game={game}, score={score}, level={level}, time={time}")
+            return jsonify({"fulfillmentText": "I received a game result, but some details were missing. Could you tell me more?"})
+
+        # Use session_id from req (always present)
+        session_id = req['session']
+
+        # Store in CONVERSATION_HISTORY for OpenAI chat later
+        # Format the stored result to be easily parseable by OpenAI later
+        structured_result_content = (
+            f"[RESULT] Game: {game}, Level: {level}, Score: {score}, Time: {time}"
+        )
+        CONVERSATION_HISTORY[session_id].append({
+            'role': 'system', # Using 'system' role for internal notes to OpenAI
+            'content': structured_result_content
+        })
+        print(f"Stored structured game result in history: {structured_result_content}")
+
+        # Optional immediate response to confirm receipt
+        # The frontend is already displaying a message using renderCustomText,
+        # so this fulfillmentText is mostly for webhook confirmation or if you want a second message.
+        response_message = f"Got it! I've noted your {game} result: {score} at {level} in {time}."
+
+        # You might want to set a context here to hint at post-game chat
+        # Or rely on the user to initiate PostGameChatIntent
+        # If PostGameChatIntent is also triggered by an explicit 'chat with me', no specific context is needed here.
+
+        return jsonify({
+            "fulfillmentText": response_message
+            # outputContexts not strictly needed here if PostGameChatIntent is initiated by user/next turn
+            # or if you want it to lead to the chat mode directly, you could add:
+            # "outputContexts": [set_chat_mode_context(session_id, 5)] # 5 is typical lifespan
+        })
 
     # Handle Default Fallback Intent - Only when not in chat mode
     elif intent_display_name == 'Default Fallback Intent':
