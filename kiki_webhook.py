@@ -79,6 +79,9 @@ Remember: You're a friendly companion, not a medical professional. Focus on emot
 # In-memory conversation history tracker (per session)
 CONVERSATION_HISTORY = defaultdict(lambda: deque(maxlen=6))
 
+# In-memory conversation history tracker for post-game chats (per session/context)
+POST_GAME_HISTORY = defaultdict(lambda: deque(maxlen=6))
+
 def get_openai_response(user_message, session_id, max_words=35):
     """
     Get a response from OpenAI for chat interactions, using conversation history for context.
@@ -229,6 +232,18 @@ def webhook():
     print(f"Intent Display Name: {intent_display_name}")
     
     session_id = req['session']
+    input_contexts = req.get('queryResult', {}).get('inputContexts', [])
+    active_context_names = [ctx['name'].split('/')[-1] for ctx in input_contexts]
+
+    # --- Clear post-game chat history if context expired ---
+    session_key_memory = f"{session_id}_memory"
+    if 'post_game_memory' not in active_context_names and session_key_memory in POST_GAME_HISTORY:
+        del POST_GAME_HISTORY[session_key_memory]
+
+    session_key_stroop = f"{session_id}_stroop"
+    if 'post_game_stroop' not in active_context_names and session_key_stroop in POST_GAME_HISTORY:
+        del POST_GAME_HISTORY[session_key_stroop]
+
     user_message = req.get('queryResult', {}).get('queryText', '')
 
     # === CHAT-RELATED INTENT HANDLING ===
@@ -319,6 +334,131 @@ def webhook():
         except Exception as e:
             print(f"OpenAI API error in PostGameChatStroopIntent: {e}")
             return jsonify({"fulfillmentText": "Well done on the Stroop Effect game! That's a tricky one that tests your focus. How did you find it?"})
+
+    # Continue Memory Match post-game chat
+    elif intent_display_name == "ContinuePostGameChatMemory":
+        system_prompt = "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it."
+        session_key = f"{session_id}_memory"
+        POST_GAME_HISTORY[session_key].append({'role': 'user', 'content': user_message})
+
+        # Build message list for OpenAI
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(POST_GAME_HISTORY[session_key])
+
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            openai_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages
+            )
+            reply = openai_response.choices[0].message.content
+            POST_GAME_HISTORY[session_key].append({'role': 'assistant', 'content': reply})
+            return jsonify({
+                "fulfillmentText": reply,
+                "outputContexts": [{
+                    "name": f"{session_id}/contexts/post_game_memory",
+                    "lifespanCount": 3
+                }]
+            })
+        except Exception as e:
+            print(f"OpenAI API error in ContinuePostGameChatMemory: {e}")
+            return jsonify({"fulfillmentText": "I'm glad you enjoyed it! Would you like to play again or try something else?"})
+
+    # Continue Stroop post-game chat
+    elif intent_display_name == "ContinuePostGameChatStroop":
+        system_prompt = "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone."
+        session_key = f"{session_id}_stroop"
+        POST_GAME_HISTORY[session_key].append({'role': 'user', 'content': user_message})
+
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(POST_GAME_HISTORY[session_key])
+
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            openai_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages
+            )
+            reply = openai_response.choices[0].message.content
+            POST_GAME_HISTORY[session_key].append({'role': 'assistant', 'content': reply})
+            return jsonify({
+                "fulfillmentText": reply,
+                "outputContexts": [{
+                    "name": f"{session_id}/contexts/post_game_stroop",
+                    "lifespanCount": 3
+                }]
+            })
+        except Exception as e:
+            print(f"OpenAI API error in ContinuePostGameChatStroop: {e}")
+            return jsonify({"fulfillmentText": "That game can be tricky! Would you like to talk more about it or try something else?"})
+
+    # Fallback during Memory Match post-game chat (dynamic OpenAI)
+    elif intent_display_name == "FallbackDuringPostGameChatMemory":
+        system_prompt = "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it."
+        session_key = f"{session_id}_memory"
+        POST_GAME_HISTORY[session_key].append({'role': 'user', 'content': user_message})
+
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(POST_GAME_HISTORY[session_key])
+
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            openai_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages
+            )
+            reply = openai_response.choices[0].message.content
+            POST_GAME_HISTORY[session_key].append({'role': 'assistant', 'content': reply})
+            return jsonify({
+                "fulfillmentText": reply,
+                "outputContexts": [{
+                    "name": f"{session_id}/contexts/post_game_memory",
+                    "lifespanCount": 2
+                }]
+            })
+        except Exception as e:
+            print(f"OpenAI API error in FallbackDuringPostGameChatMemory: {e}")
+            return jsonify({
+                "fulfillmentText": "I'm here to chat about your Memory Match game! If you want to do something else, just let me know.",
+                "outputContexts": [{
+                    "name": f"{session_id}/contexts/post_game_memory",
+                    "lifespanCount": 2
+                }]
+            })
+
+    # Fallback during Stroop Effect post-game chat (dynamic OpenAI)
+    elif intent_display_name == "FallbackDuringPostGameChatStroop":
+        system_prompt = "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone."
+        session_key = f"{session_id}_stroop"
+        POST_GAME_HISTORY[session_key].append({'role': 'user', 'content': user_message})
+
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(POST_GAME_HISTORY[session_key])
+
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            openai_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages
+            )
+            reply = openai_response.choices[0].message.content
+            POST_GAME_HISTORY[session_key].append({'role': 'assistant', 'content': reply})
+            return jsonify({
+                "fulfillmentText": reply,
+                "outputContexts": [{
+                    "name": f"{session_id}/contexts/post_game_stroop",
+                    "lifespanCount": 2
+                }]
+            })
+        except Exception as e:
+            print(f"OpenAI API error in FallbackDuringPostGameChatStroop: {e}")
+            return jsonify({
+                "fulfillmentText": "Let's keep chatting about your Stroop Effect game! If you want to try something else, just say so!",
+                "outputContexts": [{
+                    "name": f"{session_id}/contexts/post_game_stroop",
+                    "lifespanCount": 2
+                }]
+            })
 
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
     elif intent_display_name == 'FallbackDuringChatIntent':
