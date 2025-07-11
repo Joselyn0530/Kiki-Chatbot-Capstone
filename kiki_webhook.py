@@ -679,7 +679,7 @@ def webhook():
                     # Add prompt as a description card
                     rich_content_items.append({
                         "type": "description",
-                        "text": ["Please reply with the number, like "1" or "2"."]
+                        "text": ["Please reply with the number, like '1' or '2'."]
                     })
                     session_id = req['session']
                     response = {
