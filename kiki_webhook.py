@@ -282,29 +282,92 @@ def webhook():
     
     # Handle PostGameChatIntent - Chat after a game result
     elif intent_display_name == 'PostGameChatIntent':
-        # Get the last game result from conversation history (if available)
-        history = CONVERSATION_HISTORY[session_id]
-        last_game_result = ""
-        for msg in reversed(history):
-            if msg['role'] == 'user' and ('score' in msg['content'].lower() or 'finished' in msg['content'].lower()):
-                last_game_result = msg['content']
-                break
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        game_name = parameters.get('game_name')
+        score = parameters.get('score')
+        level = parameters.get('level')
+        session_id = req['session']
+        user_message = req.get('queryResult', {}).get('queryText', '').strip().lower()
 
-        user_message = req.get('queryResult', {}).get('queryText', '')
+        # Detect if user wants to chat after the game
+        chat_triggers = {"chat with me", "let's chat", "i want to chat", "talk to me", "chat"}
+        is_chat_request = user_message in chat_triggers
 
-        # Compose a prompt for OpenAI
-        if last_game_result:
+        # Compose a friendly response
+        if is_chat_request and (game_name and score is not None):
+            # User wants to chat after a game, reference their performance
             openai_prompt = (
-                f"The user just finished a game. Here is their result: {last_game_result}\n"
-                f"They said: {user_message}\n"
-                "Reply as Kiki, a warm, supportive companion. Reference their result, encourage them, and ask a friendly follow-up question."
+                f"The user just finished playing {game_name} and scored {score}."
+                + (f" (Level: {level})" if level else "")
+                + "\nThey want to chat. Start a warm, supportive conversation as Kiki, referencing their game performance, and ask a friendly follow-up question."
             )
-            ai_response = get_openai_response(openai_prompt, session_id)
+            response_text = get_openai_response(openai_prompt, session_id)
+        elif game_name and score is not None:
+            response_text = f"Great job! You scored {score} in {game_name}!"
+            if level:
+                response_text += f" (Level: {level})"
+            response_text += " Would you like to play again, try another game, or chat with me?"
         else:
-            ai_response = get_openai_response(user_message, session_id)
+            # Fallback to old behavior if parameters are missing
+            history = CONVERSATION_HISTORY[session_id]
+            last_game_result = ""
+            for msg in reversed(history):
+                if msg['role'] == 'user' and ('score' in msg['content'].lower() or 'finished' in msg['content'].lower()):
+                    last_game_result = msg['content']
+                    break
+            if is_chat_request and last_game_result:
+                openai_prompt = (
+                    f"The user just finished a game. Here is their result: {last_game_result}\n"
+                    "They want to chat. Start a warm, supportive conversation as Kiki, referencing their game performance, and ask a friendly follow-up question."
+                )
+                response_text = get_openai_response(openai_prompt, session_id)
+            else:
+                user_message = req.get('queryResult', {}).get('queryText', '')
+                if last_game_result:
+                    openai_prompt = (
+                        f"The user just finished a game. Here is their result: {last_game_result}\n"
+                        f"They said: {user_message}\n"
+                        "Reply as Kiki, a warm, supportive companion. Reference their result, encourage them, and ask a friendly follow-up question."
+                    )
+                    response_text = get_openai_response(openai_prompt, session_id)
+                else:
+                    response_text = get_openai_response(user_message, session_id)
+
+        # Suggestion chips for follow-up
+        if game_name == "Memory Match":
+            suggestions = [
+                {"text": "Play Again"},
+                {"text": "Try Stroop Effect"},
+                {"text": "Chat"}
+            ]
+        elif game_name == "Stroop Effect":
+            suggestions = [
+                {"text": "Play Again"},
+                {"text": "Try Memory Match"},
+                {"text": "Chat"}
+            ]
+        else:
+            suggestions = [
+                {"text": "Play Again"},
+                {"text": "Try Other Game"},
+                {"text": "Chat"}
+            ]
 
         return jsonify({
-            "fulfillmentText": ai_response,
+            "fulfillmentText": response_text,
+            "fulfillmentMessages": [
+                {"text": {"text": [response_text]}},
+                {
+                    "payload": {
+                        "richContent": [[
+                            {
+                                "type": "chips",
+                                "options": suggestions
+                            }
+                        ]]
+                    }
+                }
+            ],
             "outputContexts": [set_chat_mode_context(session_id)]
         })
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
@@ -365,6 +428,12 @@ def webhook():
         if task:
             task = task.strip().lower()
         GENERIC_TASKS = {"set a reminder", "reminder", "remind me", "remind", "add reminder"}
+        task = parameters.get('task')
+        if isinstance(task, list):
+            task = task[0] if task else None
+        if task:
+            task = task.strip().lower()
+
         if task and task in GENERIC_TASKS:
             # Clear both task and time contexts to avoid using previous values
             return jsonify({
