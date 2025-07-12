@@ -78,7 +78,9 @@ Important guidelines:
 - Occasionally inject humor with playful expressions
 - Sometimes offer to switch activities or suggest new things to do
 
-Remember: You're a friendly companion, not a medical professional. Focus on emotional support and casual conversation."""
+Remember: You're a friendly companion, not a medical professional. Focus on emotional support and casual conversation.
+
+Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."""
 
 # In-memory conversation history tracker (per session)
 CONVERSATION_HISTORY = defaultdict(lambda: deque(maxlen=6))
@@ -324,6 +326,7 @@ def webhook():
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
                 "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
+                "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
@@ -351,6 +354,7 @@ def webhook():
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
                 "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
+                "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
@@ -378,6 +382,7 @@ def webhook():
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
                 "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
+                "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
@@ -405,6 +410,7 @@ def webhook():
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
                 "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
+                "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
@@ -432,6 +438,7 @@ def webhook():
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
                 "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
+                "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
@@ -459,6 +466,7 @@ def webhook():
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
                 "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
+                "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
