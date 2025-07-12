@@ -324,7 +324,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 2-3 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -380,7 +380,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 2-3 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -436,7 +436,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 1-2 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just hang out and talk?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
