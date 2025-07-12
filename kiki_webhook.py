@@ -82,6 +82,14 @@ CONVERSATION_HISTORY = defaultdict(lambda: deque(maxlen=6))
 # In-memory conversation history tracker for post-game chats (per session/context)
 POST_GAME_HISTORY = defaultdict(lambda: deque(maxlen=6))
 
+# Add a helper to count post-game turns
+
+def get_postgame_turn_count(session_key):
+    # Count user turns in POST_GAME_HISTORY for this session_key
+    if session_key not in POST_GAME_HISTORY:
+        return 0
+    return sum(1 for msg in POST_GAME_HISTORY[session_key] if msg['role'] == 'user')
+
 def get_openai_response(user_message, session_id, system_prompt, max_words=35, history_dict=None):
     """
     Get a response from OpenAI for chat interactions, using conversation history for context.
@@ -299,10 +307,18 @@ def webhook():
     
     # Handle PostGameChatMemoryIntent - Chat after Memory Match game
     elif intent_display_name == "PostGameChatMemoryIntent":
-        system_prompt = (
-            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
-        )
         session_key = f"{session_id}_memory"
+        postgame_turns = get_postgame_turn_count(session_key)
+        if postgame_turns < 2:
+            system_prompt = (
+                "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. "
+                "Start by chatting about the game, but after a few turns, naturally transition to general friendly conversation. "
+                "You can ask about their day, hobbies, or offer to help with reminders or play another game. "
+                "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
+                "Keep responses to 2-3 short sentences, and use playful, natural language."
+            )
+        else:
+            system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
@@ -314,10 +330,18 @@ def webhook():
 
     # Handle PostGameChatStroopIntent - Chat after Stroop Effect game
     elif intent_display_name == "PostGameChatStroopIntent":
-        system_prompt = (
-            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
-        )
         session_key = f"{session_id}_stroop"
+        postgame_turns = get_postgame_turn_count(session_key)
+        if postgame_turns < 2:
+            system_prompt = (
+                "You are Kiki, a warm and encouraging chatbot. The user just played the Stroop Effect game. "
+                "Start by chatting about the game, but after a few turns, naturally transition to general friendly conversation. "
+                "You can ask about their day, hobbies, or offer to help with reminders or play another game. "
+                "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
+                "Keep responses to 2-3 short sentences, and use playful, natural language."
+            )
+        else:
+            system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
@@ -329,10 +353,18 @@ def webhook():
 
     # Continue Memory Match post-game chat
     elif intent_display_name == "ContinuePostGameChatMemory":
-        system_prompt = (
-            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
-        )
         session_key = f"{session_id}_memory"
+        postgame_turns = get_postgame_turn_count(session_key)
+        if postgame_turns < 2:
+            system_prompt = (
+                "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. "
+                "Start by chatting about the game, but after a few turns, naturally transition to general friendly conversation. "
+                "You can ask about their day, hobbies, or offer to help with reminders or play another game. "
+                "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
+                "Keep responses to 2-3 short sentences, and use playful, natural language."
+            )
+        else:
+            system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
@@ -344,10 +376,18 @@ def webhook():
 
     # Continue Stroop post-game chat
     elif intent_display_name == "ContinuePostGameChatStroop":
-        system_prompt = (
-            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
-        )
         session_key = f"{session_id}_stroop"
+        postgame_turns = get_postgame_turn_count(session_key)
+        if postgame_turns < 2:
+            system_prompt = (
+                "You are Kiki, a warm and encouraging chatbot. The user just played the Stroop Effect game. "
+                "Start by chatting about the game, but after a few turns, naturally transition to general friendly conversation. "
+                "You can ask about their day, hobbies, or offer to help with reminders or play another game. "
+                "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
+                "Keep responses to 2-3 short sentences, and use playful, natural language."
+            )
+        else:
+            system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
@@ -359,10 +399,18 @@ def webhook():
 
     # Fallback during Memory Match post-game chat (dynamic OpenAI)
     elif intent_display_name == "FallbackDuringPostGameChatMemory":
-        system_prompt = (
-            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
-        )
         session_key = f"{session_id}_memory"
+        postgame_turns = get_postgame_turn_count(session_key)
+        if postgame_turns < 2:
+            system_prompt = (
+                "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. "
+                "Start by chatting about the game, but after a few turns, naturally transition to general friendly conversation. "
+                "You can ask about their day, hobbies, or offer to help with reminders or play another game. "
+                "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
+                "Keep responses to 1-2 short sentences, and use playful, natural language."
+            )
+        else:
+            system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
@@ -374,10 +422,18 @@ def webhook():
 
     # Fallback during Stroop Effect post-game chat (dynamic OpenAI)
     elif intent_display_name == "FallbackDuringPostGameChatStroop":
-        system_prompt = (
-            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
-        )
         session_key = f"{session_id}_stroop"
+        postgame_turns = get_postgame_turn_count(session_key)
+        if postgame_turns < 2:
+            system_prompt = (
+                "You are Kiki, a warm and encouraging chatbot. The user just played the Stroop Effect game. "
+                "Start by chatting about the game, but after a few turns, naturally transition to general friendly conversation. "
+                "You can ask about their day, hobbies, or offer to help with reminders or play another game. "
+                "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
+                "Keep responses to 1-2 short sentences, and use playful, natural language."
+            )
+        else:
+            system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
