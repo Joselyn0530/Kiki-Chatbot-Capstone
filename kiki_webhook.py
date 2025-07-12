@@ -303,7 +303,7 @@ def webhook():
             "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
         )
         session_key = f"{session_id}_memory"
-        reply = get_openai_response(user_message, session_key, system_prompt, history_dict=POST_GAME_HISTORY, max_words=35)
+        reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -319,7 +319,7 @@ def webhook():
             "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
         )
         session_key = f"{session_id}_stroop"
-        reply = get_openai_response(user_message, session_key, system_prompt, history_dict=POST_GAME_HISTORY, max_words=35)
+        reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -336,7 +336,7 @@ def webhook():
             "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
         )
         session_key = f"{session_id}_memory"
-        reply = get_openai_response(user_message, session_key, system_prompt, history_dict=POST_GAME_HISTORY, max_words=35)
+        reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -352,7 +352,7 @@ def webhook():
             "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
         )
         session_key = f"{session_id}_stroop"
-        reply = get_openai_response(user_message, session_key, system_prompt, history_dict=POST_GAME_HISTORY, max_words=35)
+        reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -369,7 +369,7 @@ def webhook():
             "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
         )
         session_key = f"{session_id}_memory"
-        reply = get_openai_response(user_message, session_key, system_prompt, history_dict=POST_GAME_HISTORY, max_words=35)
+        reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -385,7 +385,7 @@ def webhook():
             "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
         )
         session_key = f"{session_id}_stroop"
-        reply = get_openai_response(user_message, session_key, system_prompt, history_dict=POST_GAME_HISTORY, max_words=35)
+        reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
