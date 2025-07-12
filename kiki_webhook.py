@@ -300,9 +300,7 @@ def webhook():
     # Handle PostGameChatMemoryIntent - Chat after Memory Match game
     elif intent_display_name == "PostGameChatMemoryIntent":
         system_prompt = (
-            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. "
-            "Start a friendly and reflective chat about it. "
-            "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
+            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
         )
         session_key = f"{session_id}_memory"
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
@@ -317,8 +315,7 @@ def webhook():
     # Handle PostGameChatStroopIntent - Chat after Stroop Effect game
     elif intent_display_name == "PostGameChatStroopIntent":
         system_prompt = (
-            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. "
-            "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
+            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
         )
         session_key = f"{session_id}_stroop"
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
@@ -333,9 +330,7 @@ def webhook():
     # Continue Memory Match post-game chat
     elif intent_display_name == "ContinuePostGameChatMemory":
         system_prompt = (
-            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. "
-            "Start a friendly and reflective chat about it. "
-            "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
+            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
         )
         session_key = f"{session_id}_memory"
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
@@ -350,8 +345,7 @@ def webhook():
     # Continue Stroop post-game chat
     elif intent_display_name == "ContinuePostGameChatStroop":
         system_prompt = (
-            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. "
-            "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
+            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
         )
         session_key = f"{session_id}_stroop"
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
@@ -366,9 +360,7 @@ def webhook():
     # Fallback during Memory Match post-game chat (dynamic OpenAI)
     elif intent_display_name == "FallbackDuringPostGameChatMemory":
         system_prompt = (
-            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. "
-            "Start a friendly and reflective chat about it. "
-            "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
+            "You are Kiki, a warm and encouraging chatbot. The user just played the Memory Match game. Start a friendly and reflective chat about it. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
         )
         session_key = f"{session_id}_memory"
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
@@ -383,8 +375,7 @@ def webhook():
     # Fallback during Stroop Effect post-game chat (dynamic OpenAI)
     elif intent_display_name == "FallbackDuringPostGameChatStroop":
         system_prompt = (
-            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. "
-            "Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions."
+            "You are Kiki, a friendly chatbot. The user just completed the Stroop Effect game. Respond with an encouraging, curious tone. Keep your responses to 1-2 short sentences. Be concise, friendly, and avoid repeating questions. Vary your follow-up questions: ask about their feelings, favorite part, if they'd play again, or what they'd like to try next. Do not ask the same question twice in a row. Use playful, natural language."
         )
         session_key = f"{session_id}_stroop"
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
