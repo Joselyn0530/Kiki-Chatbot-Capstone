@@ -82,34 +82,36 @@ CONVERSATION_HISTORY = defaultdict(lambda: deque(maxlen=6))
 # In-memory conversation history tracker for post-game chats (per session/context)
 POST_GAME_HISTORY = defaultdict(lambda: deque(maxlen=6))
 
-def get_openai_response(user_message, session_id, max_words=35):
+def get_openai_response(user_message, session_id, system_prompt, max_words=35, history_dict=None):
     """
     Get a response from OpenAI for chat interactions, using conversation history for context.
     Returns the AI response or a fallback message if there's an error.
+    history_dict: which conversation history to use (e.g., POST_GAME_HISTORY for post-game, CONVERSATION_HISTORY for general chat)
     """
     if not OPENAI_API_KEY:
         return "I'm having trouble connecting to my chat features right now. Let me help you with reminders or games instead!"
-    
+    if history_dict is None:
+        history_dict = CONVERSATION_HISTORY
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         # Add user message to history
-        CONVERSATION_HISTORY[session_id].append({'role': 'user', 'content': user_message})
+        history_dict[session_id].append({'role': 'user', 'content': user_message})
         # Build message list for OpenAI
-        messages = [{"role": "system", "content": KIKI_SYSTEM_PROMPT}]
-        messages.extend(CONVERSATION_HISTORY[session_id])
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history_dict[session_id])
         # Estimate tokens needed (roughly 1.3 words per token for English)
         estimated_tokens = int(max_words * 1.3) + 50  # Add buffer for safety
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=messages,
             max_tokens=estimated_tokens,  # Dynamic token limit based on word count
-            temperature=0.9,  # Higher creativity for more varied responses
-            presence_penalty=0.1,  # Slight penalty to avoid repetition
-            frequency_penalty=0.1   # Slight penalty to avoid repetitive phrases
+            temperature=0.8,
+            presence_penalty=0.1,
+            frequency_penalty=0.1
         )
         ai_response = response.choices[0].message.content.strip()
         # Add assistant reply to history
-        CONVERSATION_HISTORY[session_id].append({'role': 'assistant', 'content': ai_response})
+        history_dict[session_id].append({'role': 'assistant', 'content': ai_response})
         # Truncate to max_words if needed
         words = ai_response.split()
         if len(words) > max_words:
@@ -250,7 +252,7 @@ def webhook():
     
     # Handle OpenAiChat intent - Start chat mode
     if intent_display_name == 'OpenAiChat':
-        ai_response = get_openai_response(user_message, session_id)
+        ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
         return jsonify({
             "fulfillmentText": ai_response,
             "outputContexts": [set_chat_mode_context(session_id)]
@@ -259,7 +261,7 @@ def webhook():
     # Handle ContinueChatIntent - Continue chat in chat mode
     elif intent_display_name == 'ContinueChatIntent':
         if is_chat_mode_active(req):
-            ai_response = get_openai_response(user_message, session_id)
+            ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
             return jsonify({
                 "fulfillmentText": ai_response,
                 "outputContexts": [set_chat_mode_context(session_id)]
@@ -402,7 +404,7 @@ def webhook():
         
         if chat_mode_active:
             print("Sending to OpenAI...")
-            ai_response = get_openai_response(user_message, session_id)
+            ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
             print(f"OpenAI response: {ai_response}")
             return jsonify({
                 "fulfillmentText": ai_response,
@@ -1539,7 +1541,7 @@ def webhook():
     elif intent_display_name == 'Default Fallback Intent':
         if is_chat_mode_active(req):
             # If in chat mode, forward to OpenAI
-            ai_response = get_openai_response(user_message, session_id)
+            ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
             return jsonify({
                 "fulfillmentText": ai_response,
                 "outputContexts": [set_chat_mode_context(session_id)]
