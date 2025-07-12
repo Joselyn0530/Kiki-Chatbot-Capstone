@@ -591,7 +591,7 @@ def webhook():
         elif not date_time_str:
             # Save task to context and ask for time
             return jsonify({
-                "fulfillmentText": f"Got it — you want me to remind you to "{task}". 📝 When should I remind you?",
+                "fulfillmentText": f"Got it — you want me to remind you to \"{task}\". 📝 When should I remind you?",
                 "outputContexts": [
                     {
                         "name": f"{req['session']}/contexts/await_time",
@@ -620,7 +620,7 @@ def webhook():
 
                 response = {
                     "fulfillmentMessages": [
-                            {"text": {"text": [f"Got it! I'll remind you to "{task}" at {user_friendly_time_str}."]}}
+                            {"text": {"text": [f"Got it! I'll remind you to \"{task}\" at {user_friendly_time_str}."]}}
                         ],
                         "outputContexts": [
                             {
@@ -1499,7 +1499,7 @@ def webhook():
                 db.collection('reminders').add(reminder_data)
                 user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                 return jsonify({
-                    "fulfillmentText": f"All set! I'll remind you to "{task}" at {user_friendly_time_str}. ✅",
+                    "fulfillmentText": f"All set! I'll remind you to \"{task}\" at {user_friendly_time_str}. ✅",
                     "outputContexts": [
                         {
                             "name": f"{req['session']}/contexts/await_task",
@@ -1569,7 +1569,7 @@ def webhook():
         # If only a task is present and no valid date-time, prompt for time and set await_time context
         if task and (not date_time_str or not (isinstance(date_time_str, str) and date_time_str.strip())):
             return jsonify({
-                "fulfillmentText": f"Great! What time should I remind you to "{task}"?",
+                "fulfillmentText": f"Great! What time should I remind you to \"{task}\"?",
                 "outputContexts": [
                     {
                         "name": f"{req['session']}/contexts/await_time",
@@ -1593,7 +1593,7 @@ def webhook():
                 db.collection('reminders').add(reminder_data)
                 user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                 return jsonify({
-                    "fulfillmentText": f"All set! ✅ I'll remind you to "{task}" at {user_friendly_time_str}.",
+                    "fulfillmentText": f"All set! ✅ I'll remind you to \"{task}\" at {user_friendly_time_str}.",
                     "outputContexts": [
                         {
                             "name": f"{req['session']}/contexts/await_task",
@@ -1613,7 +1613,7 @@ def webhook():
         else:
             if task and (not date_time_str or not (isinstance(date_time_str, str) and date_time_str.strip())):
                 return jsonify({
-                    "fulfillmentText": f"Great! What time should I remind you to "{task}"?"
+                    "fulfillmentText": f"Great! What time should I remind you to \"{task}\"?"
                 })
             else:
                 return jsonify({
