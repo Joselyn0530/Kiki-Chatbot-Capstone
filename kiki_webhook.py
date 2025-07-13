@@ -199,19 +199,27 @@ def get_context_parameter(req_payload, context_name_part, param_name):
 def extract_datetime_str(dt):
     """
     Extracts an ISO-formatted date-time string from Dialogflow parameter formats.
-    Handles: string, list of string, dict with 'startTime', list of dicts.
+    Handles: string, list of string, dict with 'startTime', 'startDateTime', or 'date_time', list of dicts.
     Returns: ISO string or None.
     """
+    print(f"Debug: extract_datetime_str input: {dt}")
     if isinstance(dt, list):
         dt = dt[0] if dt else None
+        print(f"Debug: After list handling: {dt}")
     if isinstance(dt, dict):
-        dt = dt.get('startTime', None)
+        # Handle 'startTime', 'startDateTime', and 'date_time' keys
+        dt = dt.get('startTime') or dt.get('startDateTime') or dt.get('date_time')
+        print(f"Debug: After dict handling: {dt}")
     if isinstance(dt, str):
         try:
             # Validate/normalize with dateutil
-            return parser.isoparse(dt).isoformat()
-        except Exception:
+            result = parser.isoparse(dt).isoformat()
+            print(f"Debug: Final result: {result}")
+            return result
+        except Exception as e:
+            print(f"Debug: Error parsing string: {e}")
             return None
+    print(f"Debug: No valid string found, returning None")
     return None
 
 def user_friendly_time(dt_str):
@@ -604,7 +612,9 @@ def webhook():
             })
         else:
             try:
+                print(f"Debug: Processing date_time_str: {date_time_str}")
                 dt_str = extract_datetime_str(date_time_str)
+                print(f"Debug: Extracted dt_str: {dt_str}")
                 reminder_dt_obj = datetime.fromisoformat(str(dt_str))
 
                 reminder_data = {
