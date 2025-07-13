@@ -471,27 +471,34 @@
         });
 
         // Listen for chatbot responses to re-schedule reminders
-            dfMessenger.addEventListener('df-response-received', (event) => {
-      const chatbotResponse = event.detail.response?.queryResult?.fulfillmentText?.toLowerCase() || '';
-      const intentName = event.detail.response?.queryResult?.intent?.displayName;
-      console.log('Dialogflow response received - Intent:', intentName, 'Response:', chatbotResponse);
-      
-      // Only update reminders if the reply is about a reminder
-      if (
-        chatbotResponse.includes('remind') ||
-        chatbotResponse.includes('reminder') ||
-        chatbotResponse.includes("i'll remind you") ||
-        chatbotResponse.includes("got it! i'll remind you")
-      ) {
-        loadAndScheduleReminders();
-      }
-      setTimeout(() => {
-        const df = document.querySelector('df-messenger');
-        const isOpen = df && df.hasAttribute('expand');
-        console.log('df-response-received: expand attribute after delay:', isOpen);
-        if (!isOpen) showKikiBadge();
-      }, 300);
-    });
+        dfMessenger.addEventListener('df-response-received', (event) => {
+            const chatbotResponse = event.detail.response?.queryResult?.fulfillmentText?.toLowerCase() || '';
+            const intentName = event.detail.response?.queryResult?.intent?.displayName;
+            console.log('Dialogflow response received - Intent:', intentName, 'Response:', chatbotResponse);
+            
+            // Update reminders for any reminder-related intent or response
+            if (
+                intentName === 'set.reminder' ||
+                intentName === 'delete.reminder' ||
+                intentName === 'update.reminder' ||
+                chatbotResponse.includes('remind') ||
+                chatbotResponse.includes('reminder') ||
+                chatbotResponse.includes("i'll remind you") ||
+                chatbotResponse.includes("got it! i'll remind you") ||
+                chatbotResponse.includes("reminder deleted") ||
+                chatbotResponse.includes("reminder updated")
+            ) {
+                console.log('Reminder-related response detected, updating reminders...');
+                loadAndScheduleReminders();
+            }
+            
+            setTimeout(() => {
+                const df = document.querySelector('df-messenger');
+                const isOpen = df && df.hasAttribute('expand');
+                console.log('df-response-received: expand attribute after delay:', isOpen);
+                if (!isOpen) showKikiBadge();
+            }, 300);
+        });
     } else {
         console.error("df-messenger element not found for reminder script and chat state tracking.");
     }
@@ -703,7 +710,30 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', loadAndScheduleReminders);
+    // 6. Real-time Firestore listener for reminders
+    let remindersListener = null;
+    
+    function setupRemindersListener() {
+        // Remove existing listener if any
+        if (remindersListener) {
+            remindersListener();
+        }
+        
+        // Set up real-time listener for reminders
+        remindersListener = db.collection('reminders')
+            .where('status', '==', 'pending')
+            .onSnapshot((snapshot) => {
+                console.log('Reminders collection changed, updating UI...');
+                loadAndScheduleReminders();
+            }, (error) => {
+                console.error("Error setting up reminders listener:", error);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAndScheduleReminders();
+        setupRemindersListener();
+    });
 
     // Reminder List Popup Functions
     const reminderListPopup = document.getElementById('reminderListPopup');
@@ -718,13 +748,21 @@
     }
 
     async function showReminderListPopup() {
+        console.log('showReminderListPopup called');
+        
         // Hide the red badge when the user opens the reminder list
         const reminderBadge = document.getElementById('reminderBadge');
-        if (reminderBadge) reminderBadge.style.display = 'none';
+        if (reminderBadge) {
+            reminderBadge.style.display = 'none';
+            console.log('Reminder badge hidden');
+        }
+        
         if (reminderListPopup.style.display === 'block') {
             reminderListPopup.style.display = 'none'; // Hide it if it's already open
+            console.log('Reminder popup closed (was already open)');
             return; // Exit the function
         }
+        
         reminderListItems.innerHTML = ''; // Clear previous list items
 
         try {
@@ -734,17 +772,21 @@
                 .orderBy('remind_at', 'asc')
                 .get();
 
+            console.log(`Found ${snapshot.size} pending reminders`);
+
             if (snapshot.empty) {
                 const noReminders = document.createElement('li');
                 noReminders.className = 'no-reminders';
                 noReminders.textContent = 'No upcoming reminders.';
                 reminderListItems.appendChild(noReminders);
             } else {
+                let futureRemindersCount = 0;
                 snapshot.forEach(doc => {
                     const reminder = doc.data();
                     const remindAt = reminder.remind_at.toDate();
 
                     if (remindAt.getTime() > now.getTime()) { // Only show future reminders
+                        futureRemindersCount++;
                         const listItem = document.createElement('li');
                         const formattedTime = remindAt.toLocaleString('en-US', {
                             year: 'numeric',
@@ -759,14 +801,16 @@
                     }
                 });
 
-                if (reminderListItems.children.length === 0) {
+                if (futureRemindersCount === 0) {
                     const noReminders = document.createElement('li');
                     noReminders.className = 'no-reminders';
                     noReminders.textContent = 'No upcoming reminders.';
                     reminderListItems.appendChild(noReminders);
                 }
             }
+            
             reminderListPopup.style.display = 'block'; // Show the popup
+            console.log('Reminder popup displayed');
         } catch (error) {
             console.error("Error fetching reminder list:", error);
             reminderListItems.innerHTML = '<li class="no-reminders" style="color: red;">Error loading reminders.</li>';
@@ -778,6 +822,15 @@
     function closeReminderListPopup() {
         reminderListPopup.style.display = 'none';
     }
+    
+    // Function to manually refresh reminder list (can be called from external scripts)
+    function refreshReminderList() {
+        console.log('Manually refreshing reminder list...');
+        loadAndScheduleReminders();
+    }
+    
+    // Make the function globally accessible
+    window.refreshReminderList = refreshReminderList;
 
     // Onboarding Tour Logic using Intro.js
     function startOnboardingTour() {
