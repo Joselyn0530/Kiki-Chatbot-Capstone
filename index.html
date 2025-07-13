@@ -710,16 +710,28 @@
 
     // Update reminder status in Firestore (occurs regardless of display method)
     try {
-        await db.collection('reminders').doc(reminderId).update({
-            status: 'completed',
-            completed_at: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        console.log(`Reminder "${task}" (ID: ${reminderId}) marked as completed in Firestore.`);
-        loadAndScheduleReminders(); // Re-check reminders to update indicator
+        // First check if the document exists before trying to update it
+        const docRef = db.collection('reminders').doc(reminderId);
+        const docSnapshot = await docRef.get();
+        
+        if (docSnapshot.exists) {
+            await docRef.update({
+                status: 'completed',
+                completed_at: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`Reminder "${task}" (ID: ${reminderId}) marked as completed in Firestore.`);
+        } else {
+            console.log(`Reminder document ${reminderId} no longer exists, skipping status update.`);
+        }
+        
+        // Always refresh the reminders list regardless of update success
+        loadAndScheduleReminders();
     } catch (error) {
         console.error(`Error updating reminder status for ${reminderId}:`, error);
-        }
+        // Still refresh reminders even if update fails
+        loadAndScheduleReminders();
     }
+}
 
     // Function to close the custom HTML pop-up
     function closeCustomReminderPopup() {
