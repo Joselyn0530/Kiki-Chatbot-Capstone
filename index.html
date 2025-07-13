@@ -428,7 +428,6 @@
 
     const scheduledReminderTimers = {}; // { reminderId: timeoutId }
 
-    // 2. User ID Management - REMOVED: No user_client_id needed for reminders
 
     // 3. Setup Dialogflow Messenger
     const dfMessenger = document.querySelector('df-messenger');
@@ -478,8 +477,13 @@
             const intentName = event.detail.response?.queryResult?.intent?.displayName;
             console.log('Dialogflow response received - Intent:', intentName, 'Response:', chatbotResponse);
             
-            // Update reminders for any reminder-related intent or response
-            if (
+            // Always refresh reminders immediately for these confirmation intents
+            if (intentName === 'delete.reminder - yes' || intentName === 'update.reminder - yes') {
+                console.log('Reminder deleted or updated, refreshing reminders immediately...');
+                loadAndScheduleReminders();
+            }
+            // Existing logic for other reminder-related responses
+            else if (
                 intentName === 'set.reminder' ||
                 intentName === 'delete.reminder' ||
                 intentName === 'update.reminder' ||
