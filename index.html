@@ -565,6 +565,9 @@
     // 5. Load and Schedule Reminders from Firestore
     async function loadAndScheduleReminders() {
         const now = new Date();
+        const reminderListPopup = document.getElementById('reminderListPopup');
+        const isPopupOpen = reminderListPopup && reminderListPopup.style.display === 'block';
+        
         try {
             const remindersRef = db.collection('reminders');
             const snapshot = await remindersRef
@@ -580,6 +583,11 @@
                 // Hide the badge if no reminders
                 const reminderBadge = document.getElementById('reminderBadge');
                 if (reminderBadge) reminderBadge.style.display = 'none';
+                
+                // Auto-refresh popup if it's open
+                if (isPopupOpen) {
+                    autoRefreshReminderPopup();
+                }
                 return;
             }
 
@@ -595,14 +603,26 @@
 
             if (hasFutureReminders) {
                 document.getElementById('reminderListIndicator').style.display = 'flex'; // Show if future reminders exist
+                
+                // Only show red badge if popup is NOT open
                 const reminderBadge = document.getElementById('reminderBadge');
-                if (reminderBadge) reminderBadge.style.display = 'block';
+                if (reminderBadge && !isPopupOpen) {
+                    reminderBadge.style.display = 'block';
+                } else if (reminderBadge && isPopupOpen) {
+                    reminderBadge.style.display = 'none';
+                }
+                
                 // Add animation class
                 const indicator = document.getElementById('reminderListIndicator');
                 if (indicator) {
                     indicator.classList.add('reminder-indicator-animate');
                     // Remove the animation class after animation ends (2s)
                     setTimeout(() => indicator.classList.remove('reminder-indicator-animate'), 2000);
+                }
+                
+                // Auto-refresh popup if it's open
+                if (isPopupOpen) {
+                    autoRefreshReminderPopup();
                 }
             } else {
                 // document.getElementById('reminderListIndicator').style.display = 'none'; // Removed
@@ -613,6 +633,11 @@
                 // Remove animation class if present
                 const indicator = document.getElementById('reminderListIndicator');
                 if (indicator) indicator.classList.remove('reminder-indicator-animate');
+                
+                // Auto-refresh popup if it's open
+                if (isPopupOpen) {
+                    autoRefreshReminderPopup();
+                }
             }
 
 
@@ -728,6 +753,19 @@
             }, (error) => {
                 console.error("Error setting up reminders listener:", error);
             });
+    }
+    
+    // Function to auto-refresh reminder list popup if it's open
+    function autoRefreshReminderPopup() {
+        const reminderListPopup = document.getElementById('reminderListPopup');
+        if (reminderListPopup && reminderListPopup.style.display === 'block') {
+            console.log('Reminder popup is open, auto-refreshing...');
+            // Close and reopen the popup to refresh the content
+            reminderListPopup.style.display = 'none';
+            setTimeout(() => {
+                showReminderListPopup();
+            }, 100); // Small delay to ensure smooth transition
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
