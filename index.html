@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/intro.js/7.2.0/introjs.min.css" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intro.js/7.2.0/intro.min.js"></script>
+<meta charset="utf-8"/>
+<title> Kiki Games Hub </title>
+<style>
+        body { margin:0; font-family: sans-serif; display: flex; height: 100vh; }
+        .content { flex: 1; padding: 40px; overflow-y: auto; font-size: 1.3em; transition: background 0.3s, color 0.3s; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .intro { background: url('background.gif') no-repeat center center; background-size: cover; display: flex; }
+        .game-select { background: #fff0f0; }
+        .memory-match { background: #004d40; color: #fff; }
+        .button { box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3); width: 120px; height: 120px; font-size: 1.3em; cursor: pointer; margin: 150px; border: 3px solid #ffffff; border-radius: 50%; background: #fb0d45; color: #ffffff; text-align: center; }
+        .game-option { display: flex; gap: 50px; justify-content: center; margin-top: 40px; flex-wrap: wrap; }
+        .square-btn { width: 200px; height: 200px; font-size: 1.5em; cursor: pointer; border: none; border-radius: 20px; background: #333; color: #fff; }
+        #board { display: grid; grid-template-columns: repeat(4, 100px); gap: 15px; justify-content: center; margin-top: 30px; }
+        .card { width: 100px; height: 100px; background: #ccc; font-size: 2em; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 10px; }
+        .matched { background: #8f8; pointer-events: none; }
+        #startBtn { width: 120px; height: 120px; border-radius: 50%; font-size: 1.3em; cursor: pointer; margin-top: 30px; border: none; background: #fb0d45; color: #ffffff; border: 3px solid #ffffff ; display: flex; align-items: center; justify-content: center; display: none; }
+        #playAgainBtn { margin-top: 100px; padding: 15px 30px; font-size: 1.3em; cursor: pointer; border-radius: 12px; }
+        #playAgainBtn { display: none; border-radius: 12px; }
+        #levelSelect button { font-size: 1.3em; padding: 15px 30px; margin: 5px; border-radius: 12px; }
+        #levelSelect { margin-bottom: 30px; }
+        #description {background: rgb(255, 255, 255);color: #000;padding: 15px;border-radius: 8px;display: inline-block;font-size: 1.3em;max-width: 1000px;line-height: 1.5;}
+        #homeBtn { position: fixed; top: 20px; left: 20px; font-size: 1.5em; padding: 10px 20px; display: none; }
+
+        .button:hover,
+        .square-btn:hover,
+        #startBtn:hover,
+        #playAgainBtn:hover,
+        #levelSelect button:hover,
+        #restartBtn:hover,
+        #homeBtn:hover,
+        #stroopPlayAgainBtn:hover { /* Added #stroopPlayAgainBtn here */
+          transform: scale(1.05); opacity: 0.9; transition: all 0.2s ease-in-out;
+        }
+
+    /* Highlight for selected level button */
+    .selected-level {
+      background: #f8cfff !important;
+      color: #000000 !important;
+      border: 2px solid #000000 !important;
+    }
+
+    @keyframes bounceFade {
+      0%, 100% {
+        transform: translateY(0);
+        opacity: 0.95;
+      }
+      50% {
+        transform: translateY(-8px);
+        opacity: 1;
+      }
+    }
+    .bounce-fade { animation: bounceFade 1s ease-in-out infinite; text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2); }
+    #helpIcon { position: fixed; bottom: 20px; left: 20px; font-size: 2em; background: #fff; border-radius: 50%; border: 1px solid #999; width: 60px; height: 60px; text-align: center; line-height: 60px; cursor: pointer; box-shadow: 1px 1px 5px rgba(0,0,0,0.2); }
+    #helpTooltip { position: fixed; bottom: 80px; left: 20px; background: #333; color: #fff; padding: 10px; border-radius: 8px; font-size: 1.5em; display: none; width: 250px; }
+    #slogan { font-size: 2em; font-weight: bold; color: #ff3363; /* Dark pink */ text-shadow: 2px 2px 0 #ffffff, -2px -2px 0 #ffffff, 2px -2px 0 #ffffff, -2px 2px 0 #ffffff; margin-top: 0; padding-top: 20px; max-width: 90%; text-align: center; font-family: 'Arial Black', sans-serif; position: absolute; top: 0; width: 100%; z-index: 1; }
+    /* Stroop Game Styles */
+    #stroop-word-display { font-size: 10em; margin: 30px 0; height: 60px; }
+    /* NEW: Style for "Game Over!" message */
+    #stroop-word-display.game-over-message {
+        font-size: 5em; /* Adjust this value as desired for "Game Over!" */
+        /* You can add other styles here if needed, e.g., color: #fb0d45; */
+    }
+
+    .color-button { padding: 10px 20px; font-size: 1.2em; margin: 10px; border: none; cursor: pointer; border-radius: 8px; color: #fff; width: 170px; /* Fixed width for color buttons */ height: 100px; /* Fixed height for color buttons */ }
+    .color-button span { visibility: hidden; }
+    #stroop-buttons {
+      display: flex; /* Kept display flex */
+      justify-content: center; /* Added to center buttons horizontally */
+      flex-wrap: wrap; /* Added for responsiveness if many buttons */
+      margin-top: 230px; /* Added to move buttons lower */
+    }
+    #stroop-buttons, #stroop-score-display, #stroop-round-display, #stroop-timer-display, #stroopPlayAgainBtn {
+      display: none; /* Hidden by default, shown when game starts */
+    }
+
+#stroop-round-display,
+#stroop-score-display,
+#stroop-timer-display {
+    font-size: 1.5em;
+    font-weight: bold;
+    margin-top: 20px;
+}
+
+/* New style for game over message in Memory Match */
+.memory-match-game-over-message {
+    font-size: 5em; /* Reduced font size */
+    color: #000; /* Black text for visibility on memory match background */
+    margin: 10px 0; /* Reduced margin */
+    text-align: center;
+    width: 100%;
+    margin-top: 80px; /* Increased top margin to move it lower */
+
+}
+
+/* Style for score and time in Memory Match game over */
+.memory-match-game-stats {
+    font-size: 1.5em;
+    color: #000; /* Black text */
+    margin-top: 30px; /* Space from the "Great Job!" message */
+    text-align: center;
+    width: 100%;
+    font-weight: bold;
+    margin-top: 30px; /* Increased top margin to move it lower */
+}
+
+/* Styles for score and time during Memory Match game */
+#statusBox {
+    margin-top: 20px;
+    font-size: 1.3em;
+    font-weight: bold; /* Make the fonts bold */
+    display: none;
+    color: #000; /* Ensure color is visible on background */
+}
+#scoreDisplay, #timeDisplay {
+    font-weight: bold; /* Explicitly bold the spans */
+}
+
+/* Original style for general status messages (bottom right) */
+#status-messages {
+    position: fixed;
+    bottom: 30px;
+    left: 50%; /* Centered horizontally */
+    transform: translateX(-50%); /* Centered horizontally */
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 9999;
+    font-size: 1em;
+    max-width: 300px;
+    text-align: center;
+    display: none;
+}
+
+/* NEW: Style for "Result sent to Kiki!" specific notice (top center, light blue) */
+#kiki-result-notice {
+    position: fixed;
+    top: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(173, 216, 230, 0.9); /* Light blue with some transparency */
+    color: #000; /* Black text for contrast */
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 9999;
+    font-size: 1em;
+    max-width: 300px;
+    text-align: center;
+    display: none; /* Hidden by default */
+}
+
+/* Styles for the reminder list popup */
+#reminderListPopup {
+    display: none;
+    position: fixed;
+    bottom: 78px; /* 20px (indicator bottom) + 48px (indicator height) + 10px (margin) */
+    left: 135px; /* Align with the left of the indicator */
+    transform: none; /* Remove centering transform */
+    background: #fff;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+    z-index: 10000;
+    max-width: 300px;
+    width: 90%;
+    max-height: 80%;
+    overflow-y: auto;
+    border: 3px solid #ff3363;
+}
+
+#reminderListPopup h2 {
+    color: #ff3363;
+    margin-top: 0;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+#reminderListPopup ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#reminderListPopup li {
+    background: #f9f9f9;
+    margin-bottom: 10px;
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 1px solid #eee;
+    font-size: 1.1em;
+    color: #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap; /* Allow wrapping for long text */
+}
+
+#reminderListPopup li strong {
+    color: #000;
+    flex-basis: 100%; /* Task takes full width */
+    margin-bottom: 5px;
+}
+
+#reminderListPopup li span {
+    font-size: 0.9em;
+    color: #666;
+}
+
+#reminderListPopup .close-btn {
+    background: #ff3363;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-top: 15px;
+    display: block;
+    width: 100%;
+    transition: background 0.2s ease;
+}
+
+#reminderListPopup .close-btn:hover {
+    background: #e02a52;
+}
+
+#reminderListPopup .no-reminders {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+}
+
+/* Custom style for Intro.js overlay background */
+.introjs-overlay {
+    background-color: rgba(0, 0, 255, 0.7) !important; /* Blue with 70% opacity */
+}
+
+
+#kiki-widget-wrapper {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+    width: 60px;
+    height: 60px;
+}
+
+
+#kiki-launcher-highlight {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    z-index: 999;
+    background: transparent;
+}
+
+#reminderListIndicator {
+    position: fixed;
+    bottom: 20px;
+    left: 180px;
+    width: 60px;
+    height: 60px;
+    background-color: #fff;
+    border-radius: 50%;
+    border: 1px solid #999;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: pointer;
+    /* Add this to allow absolute positioning of badge */
+    position: fixed;
+}
+#reminderBadge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 16px;
+    height: 16px;
+    background: #fb0d45;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    display: none;
+    z-index: 1001;
+    box-shadow: 0 0 4px #fb0d45;
+}
+@keyframes riseUpDown {
+  0%, 100% { transform: translateY(0); }
+  20% { transform: translateY(-24px); }
+  40% { transform: translateY(0); }
+  60% { transform: translateY(-12px); }
+  80% { transform: translateY(0); }
+}
+.reminder-indicator-animate {
+  animation: riseUpDown 1s cubic-bezier(0.4, 0, 0.2, 1) 2;
+}
+</style>
+</head>
+<body>
+<audio id="reminderSound" preload="auto" src="alert.mp3" style="display: none;"></audio>
+<audio autoplay="True" id="bgMusic" loop="True"><source src="music.mp3" type="audio/mpeg"/>Your browser does not support the audio element.</audio>
+<button id="musicToggle" style="position: fixed; bottom: 20px; left: 90px; font-size: 2em; width: 60px; height: 60px; border-radius: 50%; background: #fff; border: 1px solid #999; cursor: pointer; text-align: center; line-height: 60px; box-shadow: 1px 1px 5px rgba(0,0,0,0.2); z-index: 1000;">🔊</button>
+<div id="reminderListIndicator" style="position: fixed; bottom: 20px; left: 160px; width: 60px; height: 60px; background-color: #fff; border-radius: 50%; border: 1px solid #999; z-index: 1000; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer;">
+<img alt="Reminder List" src="reminder.jpg" style="width: 68%; height: 68%; object-fit: contain; border-radius: 0%; margin: auto;"/>
+<div id="reminderBadge" style="display:none;"></div>
+</div>
+<button id="restartBtn" onclick="restartGame()" style="position: fixed; top: 20px; right: 20px; font-size: 1.3em; padding: 10px 20px; background: #fff; border: 1px solid #999; color: #000; display: none; border-radius: 2px; cursor: pointer;">Restart</button>
+<button id="homeBtn" onclick="goHome()" style="position: fixed; top: 20px; left: 20px; font-size: 1.5em; padding: 10px 20px; background: #fff; border: 1px solid #999; color: #000; display: none; border-radius: 2px; cursor: pointer;">Home</button>
+<div class="content intro" id="intro">
+<h1 class="bounce-fade" style="font-size: 2.2em; font-weight: bold; margin-top: 50px; ">Kiki Games Hub️</h1>
+<p id="slogan">Feeling lonely? Kiki is your gentle friend.<br/>Come chat with us and play together.</p>
+<button class="button" onclick="showGameSelect()">Play</button>
+</div>
+<div class="content game-select" id="gameSelect">
+<h1 style="font-size: 3em; font-weight: bold;">Welcome to Kiki Games Hub</h1>
+<p style="font-size: 2em;">Select the game you want!</p>
+<div class="game-option">
+<button class="square-btn" onclick="showSection('memoryMatch')" style="background: url('background3.jpg') no-repeat center center; background-size: cover; border: 3px solid #000000; border-radius: 20px;"></button>
+<button class="square-btn" onclick="showSection('stroopEffect')" style="background: url('background4.jpg') no-repeat center center; background-size: cover; border: 3px solid #000000; border-radius: 20px;"></button>
+</div>
+</div>
+<div class="content memory-match" id="memoryMatch" style="background: url('background5.jpg') no-repeat center center; background-size: cover;"><img alt="Memory Match Title" src="title1.jpg" style="max-width: 400px; display: block; margin: 0px auto 10px auto;"/>
+<p id="description" style="position: relative;">
+            Memory Match is a simple and fun game to exercise your memory. Flip cards to find matching fruit pairs, earn points, and see how quickly you can match them all. Play at your own pace and enjoy keeping your mind active!
+            <button onclick="speakDescription()" style="position: absolute; bottom: 8px; right: 5px; font-size: 1em; background: #fff; border: none; cursor: pointer;">🔊</button>
+</p>
+<p id="levelInstruction" style="font-size: 1.4em; margin-top: 15px; color: #000000;">Choose the level you want to play.</p><div id="levelSelect">
+<button onclick="setLevel('Easy')" style="background: #fff;">Easy (4 Pairs)</button>
+<button onclick="setLevel('Medium')" style="background: #fff;">Medium (5 Pairs)</button>
+<button onclick="setLevel('Hard')" style="background: #fff;">Hard (6 Pairs)</button>
+</div>
+<p id="levelMsg" style="font-size: 1.3em; margin-top: 20px;"></p>
+<button id="startBtn" onclick="startGame()">️Start</button>
+<div id="board"></div>
+<div id="statusBox" style="margin-top: 20px; font-size: 1.3em; display: none;">
+<span id="scoreDisplay" style="color: #000">Score: 0</span> |
+            <span id="timeDisplay" style="color: #000">Time: 0s</span>
+</div>
+<button id="playAgainBtn" onclick="startGame()" style="background: #fff;">Play Again</button>
+</div>
+<div class="content" id="stroopEffect" style="background: url('background6.jpg') no-repeat center center; background-size: cover;"><img alt="Stroop Effect Title" src="title2.jpg" style="max-width: 400px; display: block; margin: 0px auto 10px auto;"/>
+<p id="description" style="position: relative;">
+  Stroop Effect is a simple and engaging activity designed to train your attention and thinking speed.
+  You will see a color word (like "Blue") shown in a different color (like red).
+  Your task is to select the color of the text, not the word itself.
+  <button onclick="speakStroopDescription()" style="position: absolute; bottom: 8px; right: 5px; font-size: 1em; background: #fff; border: none; cursor: pointer;">🔊</button>
+</p>
+<div id="stroopTutorial" style="margin: 20px auto; text-align: center;">
+<h3 style="margin-bottom: 10px;">📌 Watch this tutorial to get started </h3>
+<video controls="" style="max-width: 50%; border-radius: 12px; border: 2px solid #fff;">
+<source src="stroopeffectdemo.mp4" type="video/mp4"/>
+    Your browser does not support the video tag.
+  </video>
+<br/>
+<button class="bounce-fade" id="stroopStartBtn" onclick="startStroopGame()" style="margin-top: 60px; width: 120px; height: 120px; border-radius: 50%; font-size: 1.3em; background: #fb0d45; color: white; border: 3px solid #ffffff; cursor: pointer;">Start</button>
+</div>
+<div id="stroop-game-container" style="display: none;">
+<div id="stroop-word-display">Color</div>
+<div id="stroop-buttons"></div>
+<div id="stroop-round-display">Round: 1 / 10</div>
+<div id="stroop-score-display">Score: 0</div>
+<div id="stroop-timer-display">Time: 0s</div>
+<button id="stroopPlayAgainBtn" onclick="startStroopGame()" style="margin-top: 30px; padding: 15px 30px; font-size: 1.3em; cursor: pointer; border-radius: 12px; background: #fff;">Play Again</button>
+</div>
+</div>
+<div id="customReminderPopup" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 9999; text-align: center; max-width: 350px; border: 3px solid #ff3363;">
+<h2 style="color: #ff3363; margin-top: 0;">🔔 Kiki Reminder! 🔔</h2>
+<p id="popupReminderTask" style="font-size: 1.2em; margin-bottom: 20px; color: #333;"></p>
+<button onclick="closeCustomReminderPopup()" style="background: #ff3363; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em;">Got It!</button>
+</div>
+<div id="reminderListPopup">
+<h2>Upcoming Reminders</h2>
+<ul id="reminderListItems">
+</ul>
+<button class="close-btn" onclick="closeReminderListPopup()">Close</button>
+</div>
+<div id="kiki-widget-wrapper" style="position: fixed; bottom: 20px; right: 20px; z-index: 10000; width: 60px; height: 60px;">
+  <div id="kiki-badge" style="display:none; position: absolute; top: 4px; right: 4px; width: 16px; height: 16px; background: #fb0d45; border-radius: 50%; border: 2px solid #fff; z-index: 10001; box-shadow: 0 0 4px #fb0d45;"></div>
+  <df-messenger agent-id="03c9c63b-dbcb-4b2e-ba86-9a5814ca1ea5" chat-title="Kiki" intent="WELCOME" language-code="en"></df-messenger>
+</div>
+<style>
+      df-messenger {
+        --df-messenger-bot-message: #8f8f8f;
+        --df-messenger-button-titlebar-color: #2a29ff;
+        --df-messenger-chat-background-color: #fafafa;
+        --df-messenger-font-color: #ffffff;
+        --df-messenger-send-icon: #39a0e3;
+        --df-messenger-user-message: #59bdff;}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+<div id="status-messages" style="position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.75); color: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999; font-size: 1em; max-width: 300px; text-align: center; display: none;">
+</div>
+<div id="kiki-result-notice" style="position: fixed; top: 30px; left: 50%; transform: translateX(-50%); background: rgba(173, 216, 230, 0.9); color: #000; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999; font-size: 1em; max-width: 300px; text-align: center; display: none;">
+</div>
+<script src="https://unpkg.com/intro.js/intro.min.js"></script>
+<link href="https://unpkg.com/intro.js/introjs.min.css" rel="stylesheet"/>
+<script>
+    // Global variable to track Kiki chat widget's open/closed state
+    let isKikiChatOpen = false;
+
+    // 1. Firebase Configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyCr5QOkwsIjXHr6DLE9J847dJTrxSX3t7s",
+        authDomain: "kikichatbot-5d6a1.firebaseapp.com",
+        projectId: "kikichatbot-5d6a1",
+        storageBucket: "kikichatbot-5d6a1.firebasestorage.app",
+        messagingSenderId: "Y993542388047",
+        appId: "1:993542388047:web:23fe420e3539d92e6c6d3a",
+        measurementId: "G-ZHD2D5T915"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // 2. User ID Management - REMOVED: No user_client_id needed for reminders
+
+    // 3. Setup Dialogflow Messenger
+    const dfMessenger = document.querySelector('df-messenger');
+    if (dfMessenger) {
+        // --- MutationObserver Setup ---
+        // This observer will more reliably track the actual visual state of the chat widget.
+        const observerConfig = {
+            attributes: true,        // Observe attribute changes
+            attributeFilter: ['opened', 'class'] // Filter for 'opened' attribute and 'class' changes
+        };
+
+        const observer = new MutationObserver((mutationsList, observer) => {
+            for (const mutation of mutationsList) {
+                if (mutation.type === 'attributes') {
+                    // Check for the 'opened' attribute
+                    if (mutation.attributeName === 'opened') {
+                        const currentOpenedState = dfMessenger.hasAttribute('opened');
+                        if (currentOpenedState) hideKikiBadge();
+                    }
+                    // Check for class changes. The Dialogflow Messenger might add a class like 'df-messenger--expanded'
+                    // when it's open. You might need to inspect the element in your browser's DevTools to confirm the exact class name.
+                    else if (mutation.attributeName === 'class') {
+                        const hasExpandedClass = dfMessenger.classList.contains('df-messenger--expanded'); // Common class name
+                        // You might need to adjust 'df-messenger--expanded' based on actual inspection
+                        if (currentOpenedState) hideKikiBadge();
+                    }
+                }
+            }
+        });
+
+        observer.observe(dfMessenger, observerConfig);
+
+        // Event listeners to track chat widget's open/closed state (keep as backup/for other specific event logic)
+        dfMessenger.addEventListener('df-chat-opened', () => {
+            isKikiChatOpen = true; // This should ideally be caught by MutationObserver too
+            console.log("Kiki chat opened. isKikiChatOpen set to true (via event). dfMessenger.opened is " + dfMessenger.opened);
+        });
+
+        dfMessenger.addEventListener('df-chat-closed', () => {
+            isKikiChatOpen = false; // This should ideally be caught by MutationObserver too
+            console.log("Kiki chat closed. isKikiChatOpen set to false (via event). dfMessenger.opened is " + dfMessenger.opened);
+        });
+
+        // Listen for chatbot responses to re-schedule reminders
+            dfMessenger.addEventListener('df-response-received', (event) => {
+      const chatbotResponse = event.detail.response?.queryResult?.fulfillmentText?.toLowerCase() || '';
+      const intentName = event.detail.response?.queryResult?.intent?.displayName;
+      console.log('Dialogflow response received - Intent:', intentName, 'Response:', chatbotResponse);
+      
+      // Only update reminders if the reply is about a reminder
+      if (
+        chatbotResponse.includes('remind') ||
+        chatbotResponse.includes('reminder') ||
+        chatbotResponse.includes("i'll remind you") ||
+        chatbotResponse.includes("got it! i'll remind you")
+      ) {
+        loadAndScheduleReminders();
+      }
+      setTimeout(() => {
+        const df = document.querySelector('df-messenger');
+        const isOpen = df && df.hasAttribute('expand');
+        console.log('df-response-received: expand attribute after delay:', isOpen);
+        if (!isOpen) showKikiBadge();
+      }, 300);
+    });
+    } else {
+        console.error("df-messenger element not found for reminder script and chat state tracking.");
+    }
+
+
+    // 4. Request Notification Permission
+    function requestNotificationPermission() {
+    if ('Notification' in window) {
+        Notification.requestPermission().then(permission => {
+            const statusMessagesDiv = document.getElementById('status-messages');
+            if (!statusMessagesDiv) {
+                console.error("Status messages div not found.");
+                return;
+            }
+
+            statusMessagesDiv.style.display = 'block'; // Make it visible now
+
+            if (permission === 'granted') {
+                console.log('Notification permission granted.');
+                statusMessagesDiv.innerText = "✅ Notifications enabled. Kiki will pop up when it's time! ";
+            } else if (permission === 'denied') {
+                console.warn('Notification permission denied.');
+                statusMessagesDiv.innerText = "❌ Notifications blocked. Tap the small icon near the website address and turn on notifications.";
+            } else {
+                console.log('Notification permission dismissed.');
+                statusMessagesDiv.innerText = "Reminder notifications aren’t set up yet. Please enable in your browser settings.";
+            }
+
+            // Schedule the message to disappear after 5 seconds
+            setTimeout(() => {
+                statusMessagesDiv.innerText = ''; // Clear text
+                statusMessagesDiv.style.display = 'none'; // Hide the div again
+            }, 3000); // 3000 milliseconds = 3 seconds
+
+        }).catch(error => {
+            console.error("Error requesting notification permission:", error);
+            const statusMessagesDiv = document.getElementById('status-messages');
+            if (statusMessagesDiv) {
+                statusMessagesDiv.style.display = 'block'; // Make it visible now
+                statusMessagesDiv.innerText = "Notifications: Error getting permission.";
+                setTimeout(() => {
+                    statusMessagesDiv.innerText = '';
+                    statusMessagesDiv.style.display = 'none';
+                }, 3000);
+            }
+        });
+    } else {
+        console.warn('This browser does not support notifications.');
+        const statusMessagesDiv = document.getElementById('status-messages');
+        if (statusMessagesDiv) {
+            statusMessagesDiv.style.display = 'block'; // Make it visible now
+            statusMessagesDiv.innerText = "Notifications: Your browser does not support desktop notifications.";
+            setTimeout(() => {
+                statusMessagesDiv.innerText = '';
+                statusMessagesDiv.style.display = 'none';
+            }, 3000);
+        }
+    }
+}
+
+    document.addEventListener('DOMContentLoaded', requestNotificationPermission);
+
+
+    // 5. Load and Schedule Reminders from Firestore
+    async function loadAndScheduleReminders() {
+        const now = new Date();
+        try {
+            const remindersRef = db.collection('reminders');
+            const snapshot = await remindersRef
+                .where('status', '==', 'pending')
+                .orderBy('remind_at', 'asc') // This might require a composite index in Firestore
+                .get();
+
+            if (snapshot.empty) {
+                console.log('No pending future reminders found.');
+                // Also hide the reminder list indicator if no reminders
+                // document.getElementById('reminderListIndicator').style.display = 'none'; // Removed
+                document.getElementById('reminderListIndicator').style.display = 'flex'; // Ensure it's always visible
+                // Hide the badge if no reminders
+                const reminderBadge = document.getElementById('reminderBadge');
+                if (reminderBadge) reminderBadge.style.display = 'none';
+                return;
+            }
+
+            let hasFutureReminders = false;
+            snapshot.forEach(doc => {
+                const reminder = doc.data();
+                const remindAt = reminder.remind_at.toDate();
+                if (remindAt.getTime() > now.getTime()) {
+                    hasFutureReminders = true;
+                    return; // Exit early if a future reminder is found
+                }
+            });
+
+            if (hasFutureReminders) {
+                document.getElementById('reminderListIndicator').style.display = 'flex'; // Show if future reminders exist
+                const reminderBadge = document.getElementById('reminderBadge');
+                if (reminderBadge) reminderBadge.style.display = 'block';
+                // Add animation class
+                const indicator = document.getElementById('reminderListIndicator');
+                if (indicator) {
+                    indicator.classList.add('reminder-indicator-animate');
+                    // Remove the animation class after animation ends (2s)
+                    setTimeout(() => indicator.classList.remove('reminder-indicator-animate'), 2000);
+                }
+            } else {
+                // document.getElementById('reminderListIndicator').style.display = 'none'; // Removed
+                document.getElementById('reminderListIndicator').style.display = 'flex'; // Ensure it's always visible
+                // Hide the badge if no future reminders
+                const reminderBadge = document.getElementById('reminderBadge');
+                if (reminderBadge) reminderBadge.style.display = 'none';
+                // Remove animation class if present
+                const indicator = document.getElementById('reminderListIndicator');
+                if (indicator) indicator.classList.remove('reminder-indicator-animate');
+            }
+
+
+            snapshot.forEach(doc => {
+                const reminder = doc.data();
+                const reminderId = doc.id;
+                const remindAt = reminder.remind_at.toDate();
+
+                console.log(`Scheduling reminder: ${reminder.task} at ${remindAt}`);
+                scheduleReminder(reminder.task, remindAt, reminderId);
+            });
+
+        } catch (error) {
+            console.error("Error loading and scheduling reminders:", error);
+            document.getElementById('status-messages').innerText = "Error loading reminders. Check console.";
+        }
+    }
+
+    // Set a timeout for a reminder
+    function scheduleReminder(task, remindAtDate, reminderId) {
+        const now = new Date();
+        const delay = remindAtDate.getTime() - now.getTime();
+
+        if (delay <= 0) {
+            console.warn(`Reminder for "${task}" is in the past or current (${delay}ms), triggering immediately.`);
+            displayNotification(task, reminderId);
+            return;
+        }
+
+        setTimeout(() => {
+            displayNotification(task, reminderId);
+        }, delay);
+    }
+
+    // Display the browser notification (now includes custom HTML pop-up)
+    async function displayNotification(task, reminderId) {
+    const reminderSound = document.getElementById('reminderSound');
+
+    // Try to play sound
+    if (reminderSound) {
+        try {
+            await reminderSound.play();
+            console.log('Reminder sound played.');
+        } catch (error) {
+            console.warn('Could not play reminder sound (e.g., autoplay policy):', error);
+        }
+    }
+
+    // Option 1: Try desktop notification first (if permission granted)
+    if (Notification.permission === 'granted') {
+        new Notification('Kiki Reminder!', {
+            body: `Don't forget: ${task}`,
+            icon: 'https://www.gstatic.com/images/branding/product/2x/dialogflow_48dp.png'
+        });
+        console.log(`Desktop notification for "${task}" attempted.`);
+    } else {
+        console.warn('Desktop notification permission not granted or denied. Falling back to HTML pop-up.');
+    }
+
+    // Option 2: Always show custom HTML pop-up as a fallback/alternativ
+    const popup = document.getElementById('customReminderPopup');
+    const popupTask = document.getElementById('popupReminderTask');
+
+    if (popup && popupTask) {
+        popupTask.innerText = `Don't forget: ${task}`;
+        popup.style.display = 'block'; // Show the pop-up
+    } else {
+        console.error("Custom reminder pop-up HTML elements not found.");
+    }
+
+    // Update reminder status in Firestore (occurs regardless of display method)
+    try {
+        await db.collection('reminders').doc(reminderId).update({
+            status: 'completed',
+            completed_at: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`Reminder "${task}" (ID: ${reminderId}) marked as completed in Firestore.`);
+        loadAndScheduleReminders(); // Re-check reminders to update indicator
+    } catch (error) {
+        console.error(`Error updating reminder status for ${reminderId}:`, error);
+        }
+    }
+
+    // Function to close the custom HTML pop-up
+    function closeCustomReminderPopup() {
+        const popup = document.getElementById('customReminderPopup');
+        const reminderSound = document.getElementById('reminderSound'); // Get sound element
+
+        if (popup) {
+            popup.style.display = 'none';
+        }
+        if (reminderSound) {
+            reminderSound.pause(); // Pause the sound
+            reminderSound.currentTime = 0; // Reset sound to the beginning
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadAndScheduleReminders);
+
+    // Reminder List Popup Functions
+    const reminderListPopup = document.getElementById('reminderListPopup');
+    const reminderListItems = document.getElementById('reminderListItems');
+    const reminderListIndicator = document.getElementById('reminderListIndicator');
+
+    // Function to open the reminder list popup
+    if (reminderListIndicator) {
+        reminderListIndicator.addEventListener('click', showReminderListPopup);
+    } else {
+        console.error("reminderListIndicator not found.");
+    }
+
+    async function showReminderListPopup() {
+        // Hide the red badge when the user opens the reminder list
+        const reminderBadge = document.getElementById('reminderBadge');
+        if (reminderBadge) reminderBadge.style.display = 'none';
+        if (reminderListPopup.style.display === 'block') {
+            reminderListPopup.style.display = 'none'; // Hide it if it's already open
+            return; // Exit the function
+        }
+        reminderListItems.innerHTML = ''; // Clear previous list items
+
+        try {
+            const now = new Date();
+            const snapshot = await db.collection('reminders')
+                .where('status', '==', 'pending')
+                .orderBy('remind_at', 'asc')
+                .get();
+
+            if (snapshot.empty) {
+                const noReminders = document.createElement('li');
+                noReminders.className = 'no-reminders';
+                noReminders.textContent = 'No upcoming reminders.';
+                reminderListItems.appendChild(noReminders);
+            } else {
+                snapshot.forEach(doc => {
+                    const reminder = doc.data();
+                    const remindAt = reminder.remind_at.toDate();
+
+                    if (remindAt.getTime() > now.getTime()) { // Only show future reminders
+                        const listItem = document.createElement('li');
+                        const formattedTime = remindAt.toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                        });
+                        listItem.innerHTML = `<strong>${reminder.task}</strong><span>${formattedTime}</span>`;
+                        reminderListItems.appendChild(listItem);
+                    }
+                });
+
+                if (reminderListItems.children.length === 0) {
+                    const noReminders = document.createElement('li');
+                    noReminders.className = 'no-reminders';
+                    noReminders.textContent = 'No upcoming reminders.';
+                    reminderListItems.appendChild(noReminders);
+                }
+            }
+            reminderListPopup.style.display = 'block'; // Show the popup
+        } catch (error) {
+            console.error("Error fetching reminder list:", error);
+            reminderListItems.innerHTML = '<li class="no-reminders" style="color: red;">Error loading reminders.</li>';
+            reminderListPopup.style.display = 'block';
+        }
+    }
+
+    // Function to close the reminder list popup
+    function closeReminderListPopup() {
+        reminderListPopup.style.display = 'none';
+    }
+
+    // Onboarding Tour Logic using Intro.js
+    function startOnboardingTour() {
+        // Check if the user has completed the tour before
+        if (localStorage.getItem('kiki_onboarding_completed') === 'true') {
+            return; // If completed, do not show the tour again
+        }
+
+        const intro = introJs();
+        intro.setOptions({
+            steps: [
+                {
+                    element: '#reminderListIndicator',
+                    intro: "Click this icon to view all your upcoming reminders you've set with Kiki.",
+                    position: 'top'
+                },
+                {
+                    element: '#kiki-launcher-highlight', // Target the df-messenger custom element
+                    intro: 'This is Kiki, your personal AI friend! Click here to chat, set reminders, and explore more features.',
+                    position: 'top'
+                }
+            ],
+            showProgress: false,
+            showBullets: true,
+            exitOnOverlayClick: false,
+            exitOnEsc: false,
+            nextLabel: 'Next &#8594;',
+            prevLabel: '&#8592; Back',
+            doneLabel: 'Done'
+        });
+
+        intro.oncomplete(function() {
+            localStorage.setItem('kiki_onboarding_completed', 'true');
+            console.log('Onboarding tour completed.');
+        });
+
+        intro.onexit(function() {
+            // Optional: You could set 'kiki_onboarding_completed' to 'true' here as well,
+            // if you want the tour not to show again even if the user exits early.
+            // For this implementation, we'll only mark as complete on 'oncomplete'.
+            console.log('Onboarding tour exited.');
+        });
+
+        // Start the tour
+        intro.start();
+    }
+
+    // Call the onboarding tour function after all content is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+        requestNotificationPermission(); // Existing call
+        loadAndScheduleReminders();     // Existing call
+        setTimeout(startOnboardingTour, 1000); // Start tour after a short delay to ensure elements are rendered
+    });
+
+</script>
+<script>
+    // Existing game-related JavaScript below...
+    </script>
+<script>
+      document.getElementById('intro').style.display = 'flex';
+      let level = '', emojis = [];
+      let lastPlayedGame = "";
+      const allEmojis = ['🍎','🍌','🍇','🍓','🍉','🍒'];
+      const board = document.getElementById('board');
+      const startBtn = document.getElementById('startBtn');
+      const playAgainBtn = document.getElementById('playAgainBtn');
+      let flipped = [], matched = 0, score = 0, timerInterval = null;
+      let startTime, endTime; let elapsedSeconds = 0;
+
+    function formatTime(totalSeconds) {
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        let timeString = "";
+        if (minutes > 0) {
+            timeString += `${minutes} minute${minutes > 1 ? 's' : ''}`;
+        }
+        if (seconds > 0) {
+            if (minutes > 0) {
+                timeString += " ";
+            }
+            timeString += `${seconds} second${seconds > 1 ? 's' : ''}`;
+        }
+        if (timeString === "") {
+            timeString = "0 seconds"; // Handle the case where time is 0
+        }
+        return timeString;
+    }
+
+
+      function restartGame() { if (confirm("Are you sure you want to restart the game?")) { setLevel(level); startGame(); } }
+      function goHome() {
+        document.querySelectorAll('.content').forEach(s => s.style.display = 'none');
+        document.getElementById('intro').style.display = 'flex';
+        document.getElementById('homeBtn').style.display = 'none';
+        document.getElementById('statusBox').style.display = 'none';
+        document.getElementById('restartBtn').style.display = 'none';
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('levelMsg').innerText = "";
+        document.getElementById('playAgainBtn').style.display = 'none';
+        document.getElementById('board').innerHTML = "";
+        // Remove the game-over-message class from the board if it exists
+        document.getElementById('board').classList.remove('memory-match-game-over-message');
+
+        level = '';
+        emojis = [];
+        flipped = [];
+        matched = 0;
+        score = 0;
+        clearInterval(timerInterval);
+        timerInterval = null;
+        document.getElementById('scoreDisplay').innerText = "Score: 0";
+        document.getElementById('timeDisplay').innerText = "Time: 0s";
+        const levelInstruction = document.getElementById('levelInstruction');
+    if (levelInstruction) levelInstruction.innerText = 'You have selected ' + level + ' level, click Start to play!'; // Fixed: changed 'selected' to 'level'
+        if (levelInstruction) levelInstruction.style.display = 'inline-block';
+
+        // Also reset Stroop game elements
+        document.getElementById('stroop-game-container').style.display = 'none';
+        document.getElementById('stroopStartBtn').style.display = 'inline-block'; // Show start button for Stroop
+        const stroopWordDisplay = document.getElementById("stroop-word-display");
+        const stroopButtons = document.getElementById("stroop-buttons");
+        const stroopScoreDisplay = document.getElementById("stroop-score-display");
+        const stroopRoundDisplay = document.getElementById("stroop-round-display");
+        const stroopTimerDisplay = document.getElementById("stroop-timer-display");
+        const stroopPlayAgainBtn = document.getElementById("stroopPlayAgainBtn");
+
+        if (stroopWordDisplay) stroopWordDisplay.textContent = "Color";
+        if (stroopButtons) stroopButtons.innerHTML = "";
+        if (stroopScoreDisplay) stroopScoreDisplay.textContent = "Score: 0";
+        if (stroopRoundDisplay) stroopRoundDisplay.textContent = "Round: 1 / 10";
+        if (stroopTimerDisplay) stroopTimerDisplay.textContent = "Time: 0s";
+        if (stroopPlayAgainBtn) stroopPlayAgainBtn.style.display = "none";
+        clearInterval(window.stroopTimerInterval); // Clear Stroop game timer
+        stroopWordDisplay.classList.remove('game-over-message'); // Ensure class is removed when returning home
+      }
+      function showGameSelect() {
+      document.querySelectorAll('.content').forEach(s => s.style.display = 'none');
+      const gameSelect = document.getElementById('gameSelect');
+      gameSelect.style.display = 'flex';
+      gameSelect.style.background = "url('background2.jpg') no-repeat center center";
+      gameSelect.style.backgroundSize = "cover";
+      document.getElementById('homeBtn').style.display = 'inline-block';
+
+      // Set background3.jpg for the Memory Match button
+      const memoryBtn = [...document.querySelectorAll('.square-btn')].find(btn => btn.textContent.includes("Memory"));
+      if (memoryBtn) { // This will likely not work as there is no textContent for these buttons, only background image.
+                      // Consider using an ID or a data-attribute for selection if you need to manipulate specific game buttons.
+                      // For now, this line might not find anything if your buttons are purely background images.
+        memoryBtn.style.background = "url('background3.jpg') no-repeat center center";
+        memoryBtn.style.backgroundSize = "cover";
+        memoryBtn.style.color = "#fff";
+      }
+    }
+      function showSection(sectionId) {
+        document.querySelectorAll('.content').forEach(s => s.style.display = 'none');
+        document.getElementById(sectionId).style.display = 'block'; // Or 'flex' if it's a flex container
+        document.getElementById('homeBtn').style.display = 'inline-block';
+        if (sectionId === 'stroopEffect') {
+            document.getElementById('stroop-game-container').style.display = 'none'; // Hide game until start button
+            document.getElementById('stroopStartBtn').style.display = 'inline-block'; // Ensure start button is visible for Stroop
+        }
+      }
+      function setLevel(selected) {
+        level = selected;
+        // Remove highlight from all level buttons
+        const levelButtons = document.querySelectorAll('#levelSelect button');
+        levelButtons.forEach(btn => btn.classList.remove('selected-level'));
+        // Highlight the selected button
+        levelButtons.forEach(btn => {
+          if (btn.textContent.includes(selected)) {
+            btn.classList.add('selected-level');
+          }
+        });
+
+        switch(level) { case 'Easy': emojis = allEmojis.slice(0, 4).flatMap(e => [e, e]); board.style.gridTemplateColumns = 'repeat(4, 100px)'; break; // Ensure grid columns are set for easy
+                        case 'Medium': emojis = allEmojis.slice(0, 5).flatMap(e => [e, e]); board.style.gridTemplateColumns = 'repeat(5, 100px)'; break; // Ensure grid columns are set for medium
+                        case 'Hard': emojis = allEmojis.slice(0, 6).flatMap(e => [e, e]); board.style.gridTemplateColumns = 'repeat(6, 100px)'; break; // Ensure grid columns are set for hard
+        }
+        startBtn.style.display = 'inline-block'; startBtn.classList.add('bounce-fade');
+    const levelInstruction = document.getElementById('levelInstruction');
+    if (levelInstruction) levelInstruction.innerText = 'You have selected ' + selected + ' level, click Start to play!';
+        document.getElementById('statusBox').style.display = 'none';
+        clearInterval(timerInterval); playAgainBtn.style.display = 'none'; board.innerHTML = '';
+        // Remove the game-over-message class from the board if it exists
+        document.getElementById('board').classList.remove('memory-match-game-over-message');
+
+    document.getElementById('restartBtn').style.display = 'none';
+      }
+      function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
+      function startGame() {
+        lastPlayedGame = "memoryMatch";
+        if (!level) { alert("Please select a level first!"); return; }
+
+        board.innerHTML = '';
+        document.getElementById('board').classList.remove('memory-match-game-over-message'); // Clear message class
+    document.getElementById('restartBtn').style.display = 'inline-block'; // Show restart on game start
+    flipped = []; matched = 0;
+
+        // Reset board styles to default for game cards
+        board.style.display = 'grid'; // Set to grid for flash cards
+        board.style.flexDirection = ''; // Clear flex direction
+        board.style.justifyContent = 'center';
+        board.style.alignItems = ''; // Clear align items
+        board.style.height = ''; // Clear explicit height
+        // gridTemplateColumns will be set by setLevel based on level selected
+        switch(level) {
+            case 'Easy': board.style.gridTemplateColumns = 'repeat(4, 100px)'; break;
+            case 'Medium': board.style.gridTemplateColumns = 'repeat(5, 100px)'; break;
+            case 'Hard': board.style.gridTemplateColumns = 'repeat(6, 100px)'; break;
+        }
+
+        startBtn.style.display = 'none'; document.getElementById("levelMsg").innerText = "";
+
+        score = 0; matched = 0;
+        document.getElementById('statusBox').style.display = 'block';
+        document.getElementById('scoreDisplay').innerText = "Score: " + score;
+        document.getElementById('timeDisplay').innerText = "Time: 0s";
+        document.getElementById('scoreDisplay').style.display = 'inline-block'; // Ensure score and time are visible
+        document.getElementById('timeDisplay').style.display = 'inline-block';
+
+
+        if (timerInterval) clearInterval(timerInterval); timerInterval = setInterval(updateTimer, 1000);
+        playAgainBtn.style.display = 'none'; startTime = new Date();
+        const cards = shuffle([...emojis]);
+        cards.forEach((emoji) => { const div = document.createElement('div'); div.className = 'card'; div.dataset.emoji = emoji; div.innerHTML = ''; div.onclick = () => {
+          if (div.classList.contains('matched') || flipped.includes(div)) return;
+          div.innerHTML = emoji; flipped.push(div);
+          if (flipped.length === 2) {
+            const [c1, c2] = flipped;
+            if (c1.dataset.emoji === c2.dataset.emoji) {
+              c1.classList.add('matched'); c2.classList.add('matched'); matched += 2; score += 2; document.getElementById("scoreDisplay").innerText = "Score: " + score;
+              if (matched === emojis.length) {
+                setTimeout(() => {
+                  const finalScore = score; endTime = new Date(); const timeUsed = elapsedSeconds; clearInterval(timerInterval);
+                  const formattedTimeUsed = formatTime(timeUsed);
+
+
+                  // Clear the board and display "Great Job!" message
+                  board.innerHTML = `<div class="memory-match-game-over-message">🎉 Great Job! 🎉<br>You finished the game!</div>
+                                     <div class="memory-match-game-stats">Score: ${finalScore}<br>Time: ${formattedTimeUsed}</div>`;board.style.display = 'flex'; // Make board a flex container to center the message
+                  board.style.flexDirection = 'column';
+                  board.style.justifyContent = 'center';
+                  board.style.alignItems = 'center';
+                  board.style.height = '300px'; // Adjust height as needed to center content
+                  board.style.gridTemplateColumns = 'none'; // Remove grid columns
+
+                  document.getElementById('statusBox').style.display = 'none'; // Hide score and time display
+                  playAgainBtn.style.display = 'inline-block';
+                  document.getElementById('restartBtn').style.display = 'none';
+
+
+                  // User will automatically send their game result to Kiki
+                  console.log('Memory Match game completed - user will send result to Kiki');
+                  // Debug the messenger structure
+                  setTimeout(() => debugDfMessenger(), 500);
+                  setTimeout(() => {
+                    // Try multiple approaches to find the input field
+                    const dfMessenger = document.querySelector("df-messenger");
+                    if (!dfMessenger) {
+                      console.log("df-messenger not found");
+                      return;
+                    }
+                    
+                    let inputField = null;
+                    
+                              // Approach 1: Try the original shadow DOM structure and deep search
+          if (dfMessenger.shadowRoot) {
+            const chatElement = dfMessenger.shadowRoot.querySelector("df-messenger-chat");
+            if (chatElement && chatElement.shadowRoot) {
+              // Try deep search inside chat shadow root
+              const chatWrapper = chatElement.shadowRoot.querySelector("div.chat-wrapper");
+              if (chatWrapper) {
+                inputField = findInputDeep(chatWrapper);
+              }
+              // Fallback: try deep search in all children
+              if (!inputField) {
+                inputField = findInputDeep(chatElement.shadowRoot);
+              }
+            }
+          }
+                    
+                    // Approach 2: Try different selectors if first approach fails
+                    if (!inputField && dfMessenger.shadowRoot) {
+                      inputField = dfMessenger.shadowRoot.querySelector("input");
+                    }
+                    
+                    // Approach 3: Try querying all inputs in shadow DOM
+                    if (!inputField && dfMessenger.shadowRoot) {
+                      const inputs = dfMessenger.shadowRoot.querySelectorAll("input");
+                      if (inputs.length > 0) {
+                        inputField = inputs[inputs.length - 1]; // Usually the last input is the chat input
+                      }
+                    }
+                    
+                    // Approach 4: Try finding by placeholder or other attributes
+                    if (!inputField && dfMessenger.shadowRoot) {
+                      inputField = dfMessenger.shadowRoot.querySelector("input[placeholder*='message'], input[placeholder*='Message'], input[type='text']");
+                    }
+                    
+                              if (inputField) {
+            console.log("Found input field, sending message");
+            inputField.value = `I just finished Memory Match ${level} level with a score of ${finalScore} in ${formattedTimeUsed} !`;
+            console.log("Set input value to:", inputField.value);
+            inputField.dispatchEvent(new Event("input", { bubbles: true }));
+            
+            // Try to manually add the user message to the chat display
+            setTimeout(() => {
+              const chatWrapper = dfMessenger.shadowRoot?.querySelector('df-messenger-chat')?.shadowRoot?.querySelector('.chat-wrapper');
+              if (chatWrapper) {
+                const messageList = chatWrapper.querySelector('df-message-list');
+                if (messageList && messageList.shadowRoot) {
+                  // Try to find the message container and add our message
+                  const messageContainer = messageList.shadowRoot.querySelector('.message-list');
+                  if (messageContainer) {
+                    const userMessageDiv = document.createElement('div');
+                    userMessageDiv.className = 'user-message';
+                    userMessageDiv.textContent = `I just finished Memory Match ${level} level with a score of ${finalScore} in ${formattedTimeUsed} !`;
+                    userMessageDiv.style.cssText = 'background: #007bff; color: white; padding: 10px; margin: 5px; border-radius: 15px; max-width: 70%; align-self: flex-end;';
+                    messageContainer.appendChild(userMessageDiv);
+                  }
+                }
+              }
+            }, 50);
+            
+            // Try to find and click the send button
+            const sendButton = inputField.closest('.input-container')?.querySelector('button[id="sendIconButton"]') ||
+                              inputField.closest('.input-box-wrapper')?.querySelector('button[id="sendIconButton"]') ||
+                              inputField.parentElement?.querySelector('button[id="sendIconButton"]');
+            
+            if (sendButton) {
+              console.log("Found send button, clicking it");
+              sendButton.click();
+            } else {
+              console.log("Send button not found, trying Enter key");
+              inputField.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+            }
+            
+            // Add a listener to see if the message was actually sent
+            setTimeout(() => {
+              console.log("Checking if message was sent - input value now:", inputField.value);
+            }, 100);
+          } else {
+                      console.log("Could not find input field, trying fallback approach");
+                      // Fallback: Try to open chat and then send
+                      if (dfMessenger.click) {
+                        dfMessenger.click();
+                        
+                        // Wait for chat to open and then try to send message
+                        const waitForChatOpen = () => {
+                          setTimeout(() => {
+                            // Try to find input field again after chat opens
+                            let retryInput = null;
+                            
+                            if (dfMessenger.shadowRoot) {
+                              const chatElement = dfMessenger.shadowRoot.querySelector("df-messenger-chat");
+                              if (chatElement && chatElement.shadowRoot) {
+                                const chatWrapper = chatElement.shadowRoot.querySelector("div.chat-wrapper");
+                                if (chatWrapper) {
+                                  retryInput = findInputDeep(chatWrapper);
+                                }
+                                if (!retryInput) {
+                                  retryInput = findInputDeep(chatElement.shadowRoot);
+                                }
+                              }
+                            }
+                            
+                            if (!retryInput && dfMessenger.shadowRoot) {
+                              retryInput = dfMessenger.shadowRoot.querySelector("input");
+                            }
+                            
+                            if (!retryInput && dfMessenger.shadowRoot) {
+                              const inputs = dfMessenger.shadowRoot.querySelectorAll("input");
+                              if (inputs.length > 0) {
+                                retryInput = inputs[inputs.length - 1];
+                              }
+                            }
+                            
+                            if (retryInput) {
+                              console.log("Found input field after chat opened, sending message");
+                              retryInput.value = `I just finished Memory Match ${level} level with a score of ${finalScore} in ${formattedTimeUsed} !`;
+                              retryInput.dispatchEvent(new Event("input", { bubbles: true }));
+                              
+                              // Try to find and click the send button
+                              const sendButton = retryInput.closest('.input-container')?.querySelector('button[id="sendIconButton"]') ||
+                                                retryInput.closest('.input-box-wrapper')?.querySelector('button[id="sendIconButton"]') ||
+                                                retryInput.parentElement?.querySelector('button[id="sendIconButton"]');
+                              
+                              if (sendButton) {
+                                console.log("Found send button after chat opened, clicking it");
+                                sendButton.click();
+                              } else {
+                                console.log("Send button not found after chat opened, trying Enter key");
+                                retryInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+                              }
+                            } else {
+                              console.log("Still no input field found after chat opened, retrying...");
+                              // Retry a few more times with increasing delays
+                              setTimeout(waitForChatOpen, 200);
+                            }
+                          }, 300); // Wait 300ms for chat to open
+                        };
+                        
+                        waitForChatOpen();
+                      }
+                    }
+                  }, 1000);
+                }, 500);
+              }
+            } else { setTimeout(() => { c1.innerHTML = ''; c2.innerHTML = ''; }, 800); }
+            flipped = [];
+          }
+        }; board.appendChild(div); });
+      }
+    </script>
+<script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
+<script>
+    function updateTimer() { elapsedSeconds = Math.round((new Date() - startTime) / 1000); document.getElementById("timeDisplay").innerText = "Time: " + elapsedSeconds + "s"; }
+    </script>
+<script>
+      function speakDescription() {
+        speechSynthesis.cancel();
+        const text = document.getElementById("description").innerText;
+        const cleanedText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "",).trim();
+        const utterance = new SpeechSynthesisUtterance(cleanedText);
+        utterance.lang = "en-US";
+        utterance.rate = 0.9;
+        speechSynthesis.speak(utterance);
+      }
+
+
+function speakStroopDescription() {
+  speechSynthesis.cancel();
+  const text = document.querySelector('#stroopEffect #description').innerText;
+  const cleanedText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "",).trim();
+  const utterance = new SpeechSynthesisUtterance(cleanedText);
+  utterance.lang = "en-US";
+  utterance.rate = 0.9;
+  speechSynthesis.speak(utterance);
+}
+
+
+      document.addEventListener("click", function(e) {
+        if (!e.target.closest("#description button")) {
+          speechSynthesis.cancel();
+        }
+      });
+    </script>
+<div id="helpIcon" onclick="toggleHelp()">?</div>
+<div id="helpTooltip">Need help? Chat with Kiki using the chatbot in the bottom right corner!</div>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const music = document.getElementById("bgMusic");
+      const toggleBtn = document.getElementById("musicToggle");
+
+      toggleBtn.addEventListener("click", () => {
+        if (music.paused) {
+          music.play();
+          toggleBtn.textContent = "🔊";
+        } else {
+          music.pause();
+          toggleBtn.textContent = "🔇";
+        }
+      });
+    });
+    </script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    let userClientId = localStorage.getItem('kiki_user_client_id');
+    if (!userClientId) {
+      userClientId = crypto.randomUUID();
+      localStorage.setItem('kiki_user_client_id', userClientId);
+      console.log("New userClientId:", userClientId);
+    } else {
+      console.log("Existing userClientId:", userClientId);
+    }
+
+    const dfMessenger = document.querySelector('df-messenger');
+    if (!dfMessenger) {
+      console.error("df-messenger element not found.");
+      return;
+    }
+
+    dfMessenger.addEventListener('df-request-sent', (event) => {
+      const requestBody = event.detail.requestBody;
+      if (!requestBody.queryParams) requestBody.queryParams = {};
+      requestBody.queryParams.payload = {
+        user_client_id: userClientId
+      };
+      console.log("Injected payload with user_client_id:", userClientId);
+    });
+  });
+</script>
+<script>
+    const colors = ["Red", "Green", "Blue", "Yellow", "Purple", "Orange"];
+    const colorMap = {
+      Red: "#e74c3c", Green: "#27ae60", Blue: "#2980b9",
+      Yellow: "#f1c40f", Purple: "#8e44ad", Orange: "#e67e22"
+    };
+
+    let stroopScore = 0, stroopRound = 1, stroopMaxRounds = 10, stroopStartTime, stroopTimerInterval;
+    let elapsedStroopSeconds = 0;
+    const stroopWordDisplay = document.getElementById("stroop-word-display");
+    const stroopButtons = document.getElementById("stroop-buttons");
+    const stroopScoreDisplay = document.getElementById("stroop-score-display");
+    const stroopRoundDisplay = document.getElementById("stroop-round-display");
+    const stroopTimerDisplay = document.getElementById("stroop-timer-display");
+    const stroopStartBtn = document.getElementById("stroopStartBtn");
+    const stroopPlayAgainBtn = document.getElementById("stroopPlayAgainBtn");
+    const stroopTutorialDiv = document.getElementById("stroopTutorial");
+    const stroopGameContainer = document.getElementById("stroop-game-container");
+
+
+    function startStroopTimer() {
+      stroopStartTime = Date.now();
+      stroopTimerInterval = setInterval(() => {
+        elapsedStroopSeconds = Math.floor((Date.now() - stroopStartTime) / 1000);
+        stroopTimerDisplay.textContent = `Time: ${elapsedStroopSeconds}s`;
+      }, 1000);
+    }
+
+    function stopStroopTimer() {
+      clearInterval(stroopTimerInterval);
+    }
+
+    function generateStroopChallenge() {
+      // Get existing buttons or create them if the first round
+      let btns = Array.from(stroopButtons.children);
+      const isFirstChallenge = btns.length === 0;
+
+      const textColor = colors[Math.floor(Math.random() * colors.length)];
+      let word = colors[Math.floor(Math.random() * colors.length)];
+      while (word === textColor) {
+        word = colors[Math.floor(Math.random() * colors.length)];
+      }
+
+      stroopWordDisplay.textContent = word;
+      stroopWordDisplay.style.color = colorMap[textColor];
+      stroopWordDisplay.classList.remove('game-over-message');
+
+      const shuffledColors = [...colors].sort(() => Math.random() - 0.5);
+
+      shuffledColors.forEach((color, index) => {
+        let btn;
+        if (isFirstChallenge) {
+          btn = document.createElement("button");
+          btn.className = "color-button";
+          const hiddenLabel = document.createElement("span");
+          hiddenLabel.textContent = color;
+          btn.appendChild(hiddenLabel);
+          stroopButtons.appendChild(btn);
+        } else {
+          btn = btns[index];
+        }
+        btn.style.backgroundColor = colorMap[color];
+        btn.onclick = () => handleStroopAnswer(color === textColor);
+      });
+    }
+
+    function handleStroopAnswer(correct) {
+      if (correct) stroopScore++;
+      stroopScoreDisplay.textContent = `Score: ${stroopScore}`;
+      stroopRound++;
+      if (stroopRound > stroopMaxRounds) {
+        stopStroopTimer();
+        stroopWordDisplay.innerHTML = "🎉 Well Done! 🎉<br>" + "You finished the game!";
+        stroopWordDisplay.classList.add('game-over-message');
+        stroopWordDisplay.style.color = "";
+
+        // Hide the buttons instead of clearing them
+        Array.from(stroopButtons.children).forEach(btn => btn.style.display = 'none');
+
+
+        stroopScoreDisplay.style.display = 'none';
+        stroopTimerDisplay.style.display = 'none';
+
+        const formattedStroopTime = formatTime(elapsedStroopSeconds);
+
+        stroopRoundDisplay.innerHTML = `Final Score: ${stroopScore} / ${stroopMaxRounds}<br>Time: ${formattedStroopTime}`;
+        stroopPlayAgainBtn.style.display = "inline-block";
+        document.getElementById('restartBtn').style.display = 'none';
+
+        // User will automatically send their game result to Kiki
+        console.log('Stroop Effect game completed - user will send result to Kiki');
+        // Debug the messenger structure
+        setTimeout(() => debugDfMessenger(), 500);
+        setTimeout(() => {
+          // Try multiple approaches to find the input field
+          const dfMessenger = document.querySelector("df-messenger");
+          if (!dfMessenger) {
+            console.log("df-messenger not found");
+            return;
+          }
+          
+          let inputField = null;
+          
+          // Approach 1: Try the original shadow DOM structure and deep search
+          if (dfMessenger.shadowRoot) {
+            const chatElement = dfMessenger.shadowRoot.querySelector("df-messenger-chat");
+            if (chatElement && chatElement.shadowRoot) {
+              // Try deep search inside chat shadow root
+              const chatWrapper = chatElement.shadowRoot.querySelector("div.chat-wrapper");
+              if (chatWrapper) {
+                inputField = findInputDeep(chatWrapper);
+              }
+              // Fallback: try deep search in all children
+              if (!inputField) {
+                inputField = findInputDeep(chatElement.shadowRoot);
+              }
+            }
+          }
+          
+          // Approach 2: Try different selectors if first approach fails
+          if (!inputField && dfMessenger.shadowRoot) {
+            inputField = dfMessenger.shadowRoot.querySelector("input");
+          }
+          
+          // Approach 3: Try querying all inputs in shadow DOM
+          if (!inputField && dfMessenger.shadowRoot) {
+            const inputs = dfMessenger.shadowRoot.querySelectorAll("input");
+            if (inputs.length > 0) {
+              inputField = inputs[inputs.length - 1]; // Usually the last input is the chat input
+            }
+          }
+          
+          // Approach 4: Try finding by placeholder or other attributes
+          if (!inputField && dfMessenger.shadowRoot) {
+            inputField = dfMessenger.shadowRoot.querySelector("input[placeholder*='message'], input[placeholder*='Message'], input[type='text']");
+          }
+          
+          if (inputField) {
+            console.log("Found input field, sending message");
+            inputField.value = `I finished playing Stroop Effect with a score of ${stroopScore} in ${formattedStroopTime}`;
+            console.log("Set input value to:", inputField.value);
+            inputField.dispatchEvent(new Event("input", { bubbles: true }));
+            
+            // Try to manually add the user message to the chat display
+            setTimeout(() => {
+              const chatWrapper = dfMessenger.shadowRoot?.querySelector('df-messenger-chat')?.shadowRoot?.querySelector('.chat-wrapper');
+              if (chatWrapper) {
+                const messageList = chatWrapper.querySelector('df-message-list');
+                if (messageList && messageList.shadowRoot) {
+                  // Try to find the message container and add our message
+                  const messageContainer = messageList.shadowRoot.querySelector('.message-list');
+                  if (messageContainer) {
+                    const userMessageDiv = document.createElement('div');
+                    userMessageDiv.className = 'user-message';
+                    userMessageDiv.textContent = `I finished playing Stroop Effect with a score of ${stroopScore} in ${formattedStroopTime} !`;
+                    userMessageDiv.style.cssText = 'background: #007bff; color: white; padding: 10px; margin: 5px; border-radius: 15px; max-width: 70%; align-self: flex-end;';
+                    messageContainer.appendChild(userMessageDiv);
+                  }
+                }
+              }
+            }, 50);
+            
+            // Try to find and click the send button
+            const sendButton = inputField.closest('.input-container')?.querySelector('button[id="sendIconButton"]') ||
+                              inputField.closest('.input-box-wrapper')?.querySelector('button[id="sendIconButton"]') ||
+                              inputField.parentElement?.querySelector('button[id="sendIconButton"]');
+            
+            if (sendButton) {
+              console.log("Found send button, clicking it");
+              sendButton.click();
+            } else {
+              console.log("Send button not found, trying Enter key");
+              inputField.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+            }
+            
+            // Add a listener to see if the message was actually sent
+            setTimeout(() => {
+              console.log("Checking if message was sent - input value now:", inputField.value);
+            }, 100);
+          } else {
+            console.log("Could not find input field, trying fallback approach");
+            // Fallback: Try to open chat and then send
+            if (dfMessenger.click) {
+              dfMessenger.click();
+              
+              // Wait for chat to open and then try to send message
+              const waitForChatOpen = () => {
+                setTimeout(() => {
+                  // Try to find input field again after chat opens
+                  let retryInput = null;
+                  
+                  if (dfMessenger.shadowRoot) {
+                    const chatElement = dfMessenger.shadowRoot.querySelector("df-messenger-chat");
+                    if (chatElement && chatElement.shadowRoot) {
+                      const chatWrapper = chatElement.shadowRoot.querySelector("div.chat-wrapper");
+                      if (chatWrapper) {
+                        retryInput = findInputDeep(chatWrapper);
+                      }
+                      if (!retryInput) {
+                        retryInput = findInputDeep(chatElement.shadowRoot);
+                      }
+                    }
+                  }
+                  
+                  if (!retryInput && dfMessenger.shadowRoot) {
+                    retryInput = dfMessenger.shadowRoot.querySelector("input");
+                  }
+                  
+                  if (!retryInput && dfMessenger.shadowRoot) {
+                    const inputs = dfMessenger.shadowRoot.querySelectorAll("input");
+                    if (inputs.length > 0) {
+                      retryInput = inputs[inputs.length - 1];
+                    }
+                  }
+                  
+                  if (retryInput) {
+                    console.log("Found input field after chat opened, sending message");
+                    retryInput.value = `I finished playing Stroop Effect with a score of ${stroopScore} in ${formattedStroopTime} !`;
+                    retryInput.dispatchEvent(new Event("input", { bubbles: true }));
+                    
+                    // Try to find and click the send button
+                    const sendButton = retryInput.closest('.input-container')?.querySelector('button[id="sendIconButton"]') ||
+                                      retryInput.closest('.input-box-wrapper')?.querySelector('button[id="sendIconButton"]') ||
+                                      retryInput.parentElement?.querySelector('button[id="sendIconButton"]');
+                    
+                    if (sendButton) {
+                      console.log("Found send button after chat opened, clicking it");
+                      sendButton.click();
+                    } else {
+                      console.log("Send button not found after chat opened, trying Enter key");
+                      retryInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+                    }
+                  } else {
+                    console.log("Still no input field found after chat opened, retrying...");
+                    // Retry a few more times with increasing delays
+                    setTimeout(waitForChatOpen, 200);
+                  }
+                }, 300); // Wait 300ms for chat to open
+              };
+              
+              waitForChatOpen();
+            }
+          }
+        }, 1000);
+      } else {
+        stroopRoundDisplay.textContent = `Round: ${stroopRound} / ${stroopMaxRounds}`;
+        setTimeout(generateStroopChallenge, 800);
+      }
+    }
+
+    function startStroopGame() {
+      lastPlayedGame = "stroopEffect";
+      stroopGameContainer.style.display = 'block';
+
+      stroopScore = 0;
+      stroopRound = 1;
+      elapsedStroopSeconds = 0;
+      stroopStartBtn.style.display = "none";
+      stroopPlayAgainBtn.style.display = "none";
+      stroopScoreDisplay.textContent = "Score: 0";
+      stroopRoundDisplay.textContent = "Round: 1 / 10";
+      stroopTimerDisplay.textContent = "Time: 0s";
+      document.getElementById('restartBtn').style.display = 'inline-block';
+
+      stroopWordDisplay.style.display = "block";
+      stroopButtons.style.display = "flex";
+      stroopScoreDisplay.style.display = "block";
+      stroopRoundDisplay.style.display = "block";
+      stroopTimerDisplay.style.display = "block";
+      // Ensure buttons are visible when starting a new game
+      Array.from(stroopButtons.children).forEach(btn => btn.style.display = 'inline-block');
+
+
+      stroopWordDisplay.classList.remove('game-over-message');
+
+      startStroopTimer();
+      generateStroopChallenge();
+    }
+
+    function restartStroopGame() {
+        if (confirm("Are you sure you want to restart the Stroop game?")) {
+            startStroopGame();
+        }
+    }
+    const originalRestartGame = window.restartGame;
+    window.restartGame = function() {
+        const stroopEffectDiv = document.getElementById('stroopEffect');
+        if (stroopEffectDiv && stroopEffectDiv.style.display === 'block') {
+            restartStroopGame();
+        } else {
+            originalRestartGame();
+        }
+    };
+
+</script>
+<div id="kiki-launcher-highlight"></div></body>
+<script>
+function toggleHelp() {
+  const tooltip = document.getElementById('helpTooltip');
+  tooltip.style.display = (tooltip.style.display === 'block') ? 'none' : 'block';
+}
+</script>
+<script>
+    // --- Kiki Badge Notification Logic ---
+    const kikiBadge = document.getElementById('kiki-badge');
+    function showKikiBadge() {
+      const dfMessenger = document.querySelector('df-messenger');
+      if (!dfMessenger) {
+        console.log('showKikiBadge: dfMessenger not found, badge will NOT be shown');
+        return;
+      }
+      if (isChatWidgetOpen()) {
+        console.log('showKikiBadge: chat is open, badge will NOT be shown');
+        return;
+      }
+      console.log('showKikiBadge called. kikiBadge:', kikiBadge, 'dfMessenger:', dfMessenger, 'isChatWidgetOpen:', isChatWidgetOpen());
+      if (kikiBadge) {
+        kikiBadge.style.display = 'block';
+        console.log('kikiBadge.style.display set to', kikiBadge.style.display);
+      } else {
+        console.log('kikiBadge element not found!');
+      }
+    }
+    function hideKikiBadge() {
+      if (kikiBadge) {
+        kikiBadge.style.display = 'none';
+        console.log('hideKikiBadge called, badge hidden');
+      }
+    }
+    if (dfMessenger) {
+        dfMessenger.addEventListener('df-chat-opened', () => { hideKikiBadge(); });
+        dfMessenger.addEventListener('df-chat-closed', () => { /* nothing needed, badge only shows on reply */ });
+        dfMessenger.addEventListener('df-response-received', (event) => {
+            // Only show badge if chat is closed
+            if (!isChatWidgetOpen()) {
+                showKikiBadge();
+            }
+        });
+    }
+</script>
+<script>
+const kikiWrapper = document.getElementById('kiki-widget-wrapper');
+if (kikiWrapper) {
+  kikiWrapper.addEventListener('click', () => {
+    hideKikiBadge();
+  });
+}
+</script>
+<script>
+function isChatWidgetOpen() {
+  const dfMessenger = document.querySelector('df-messenger');
+  if (!dfMessenger) {
+    console.log('isChatWidgetOpen: dfMessenger not found');
+    return false;
+  }
+  const openByExpandAttr = dfMessenger.hasAttribute('expand');
+  console.log('isChatWidgetOpen check: expand attribute:', openByExpandAttr, 'attributes:', dfMessenger.getAttributeNames());
+  return openByExpandAttr;
+}
+
+function sendGameResultToKiki(messageToSend, attempt = 0) {
+  if (!window.dfMessenger) {
+    // Wait for DOMContentLoaded if not already loaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function onDomReady() {
+        document.removeEventListener('DOMContentLoaded', onDomReady);
+        window.dfMessenger = document.querySelector('df-messenger');
+        sendGameResultToKiki(messageToSend, attempt);
+      });
+      return;
+    } else {
+      window.dfMessenger = document.querySelector('df-messenger');
+    }
+  }
+  console.log('sendGameResultToKiki: window.dfMessenger =', window.dfMessenger);
+  if (window.dfMessenger && window.dfMessenger.renderCustomText) {
+    window.dfMessenger.renderCustomText(messageToSend);
+    setTimeout(() => {
+      const df = document.querySelector('df-messenger');
+      const isOpen = df && df.hasAttribute('expand');
+      console.log('game result: expand attribute after delay:', isOpen);
+      if (!isOpen) showKikiBadge();
+    }, 300);
+  } else {
+    if (attempt < 10) {
+      console.log('dfMessenger or renderCustomText not available, retrying...', attempt);
+      setTimeout(() => sendGameResultToKiki(messageToSend, attempt + 1), 200);
+    } else {
+      console.log('dfMessenger or renderCustomText not available after 10 attempts!');
+    }
+  }
+}
+
+// Debug function to inspect the Dialogflow messenger structure
+function debugDfMessenger() {
+  const dfMessenger = document.querySelector('df-messenger');
+  console.log('=== Dialogflow Messenger Debug ===');
+  console.log('dfMessenger element:', dfMessenger);
+  console.log('Has shadowRoot:', !!dfMessenger?.shadowRoot);
+  
+  if (dfMessenger?.shadowRoot) {
+    console.log('Shadow root children:', dfMessenger.shadowRoot.children);
+    console.log('All elements in shadow root:', dfMessenger.shadowRoot.querySelectorAll('*'));
+    console.log('Input elements in shadow root:', dfMessenger.shadowRoot.querySelectorAll('input'));
+    
+    // Try to find the chat element
+    const chatElement = dfMessenger.shadowRoot.querySelector('df-messenger-chat');
+    console.log('Chat element:', chatElement);
+    if (chatElement?.shadowRoot) {
+      console.log('Chat shadow root children:', chatElement.shadowRoot.children);
+      console.log('Input in chat shadow root:', chatElement.shadowRoot.querySelector('input'));
+      
+      // Let's explore deeper into the chat shadow root
+      const chatShadowChildren = chatElement.shadowRoot.children;
+      for (let i = 0; i < chatShadowChildren.length; i++) {
+        const child = chatShadowChildren[i];
+        console.log(`Chat shadow child ${i}:`, child.tagName, child.className);
+        if (child.shadowRoot) {
+          console.log(`Child ${i} has shadow root:`, child.shadowRoot.children);
+          console.log(`Inputs in child ${i} shadow:`, child.shadowRoot.querySelectorAll('input'));
+        }
+      }
+    }
+  }
+}
+
+// Utility: Deep search for input field in any shadow DOM
+function findInputDeep(element) {
+  if (!element) return null;
+  if (element.tagName === 'INPUT') return element;
+  // Search shadow root if present
+  if (element.shadowRoot) {
+    const found = findInputDeepInList(element.shadowRoot.children);
+    if (found) return found;
+  }
+  // Search children
+  return findInputDeepInList(element.children);
+}
+function findInputDeepInList(list) {
+  for (let i = 0; i < list.length; i++) {
+    const found = findInputDeep(list[i]);
+    if (found) return found;
+  }
+  return null;
+}
+</script>
+<script>
+// Add this after the DOM is loaded and df-messenger is present
+function setupKikiBadgeObserver() {
+  const dfMessenger = document.querySelector('df-messenger');
+  if (!dfMessenger) return;
+  // Find the chat window inside the shadow DOM
+  const trySetup = () => {
+    const shadow = dfMessenger.shadowRoot;
+    if (!shadow) {
+      setTimeout(trySetup, 200);
+      return;
+    }
+    const chatWindow = shadow.querySelector('.chat-wrapper, .df-messenger-chat-wrapper, .df-messenger-chat');
+    if (!chatWindow) {
+      setTimeout(trySetup, 200);
+      return;
+    }
+    let lastMessageCount = chatWindow.children.length;
+    new MutationObserver(() => {
+      const newCount = chatWindow.children.length;
+      if (newCount > lastMessageCount) {
+        lastMessageCount = newCount;
+        // Only show badge if chat is closed
+        if (!isChatWidgetOpen()) showKikiBadge();
+      } else {
+        lastMessageCount = newCount;
+      }
+    }).observe(chatWindow, { childList: true });
+  };
+  trySetup();
+}
+document.addEventListener('DOMContentLoaded', setupKikiBadgeObserver);
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const dfMessenger = document.querySelector('df-messenger');
+  if (!dfMessenger) return;
+
+  dfMessenger.addEventListener('df-response-received', function(event) {
+    const responses = event.detail.response?.queryResult?.fulfillmentMessages || [];
+    responses.forEach(msg => {
+      if (msg.payload && msg.payload.memoryMatchGame) {
+        showSection('memoryMatch');
+      }
+      if (msg.payload && msg.payload.stroopEffectGame) {
+        showSection('stroopEffect');
+      }
+    });
+  });
+});
+</script>
+<script>
+// === Post-game intent listener ===
+document.addEventListener('DOMContentLoaded', function () {
+  const dfMessenger = document.querySelector('df-messenger');
+  if (!dfMessenger) return;
+
+  dfMessenger.addEventListener('df-response-received', (event) => {
+    const intentName = event.detail.response?.queryResult?.intent?.displayName;
+
+    if (intentName === 'PlayAgainIntent') {
+      if (lastPlayedGame === 'memoryMatch') startGame();
+      else if (lastPlayedGame === 'stroopEffect') startStroopGame();
+    }
+
+    if (intentName === 'StroopGameIntent') {
+      showSection('stroopEffect');
+      startStroopGame();
+    }
+
+    if (intentName === 'MemoryMatchIntent') {
+      showSection('memoryMatch');
+      startGame();
+    }
+
+    if (intentName === 'PostGameChatIntent') {
+      // Optional: if you use OpenAI API to respond to post-game discussion
+      console.log('User wants to chat about game result.');
+      // You can trigger follow-up here if needed.
+    }
+  });
+});
+</script>
+</html>
