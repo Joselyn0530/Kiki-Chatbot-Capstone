@@ -1066,6 +1066,36 @@
         document.querySelectorAll('.content').forEach(s => s.style.display = 'none');
         document.getElementById(sectionId).style.display = 'block'; // Or 'flex' if it's a flex container
         document.getElementById('homeBtn').style.display = 'inline-block';
+
+        if (sectionId === 'memoryMatch') {
+            // Reset Memory Match state
+            level = '';
+            emojis = [];
+            flipped = [];
+            matched = 0;
+            score = 0;
+            clearInterval(timerInterval);
+            timerInterval = null;
+            document.getElementById('scoreDisplay').innerText = "Score: 0";
+            document.getElementById('timeDisplay').innerText = "Time: 0s";
+            document.getElementById('statusBox').style.display = 'none';
+            document.getElementById('restartBtn').style.display = 'none';
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('levelMsg').innerText = "";
+            document.getElementById('playAgainBtn').style.display = 'none';
+            document.getElementById('board').innerHTML = "";
+            document.getElementById('board').classList.remove('memory-match-game-over-message');
+            // Reset level instruction
+            const levelInstruction = document.getElementById('levelInstruction');
+            if (levelInstruction) {
+                levelInstruction.innerText = 'Choose the level you want to play.';
+                levelInstruction.style.display = 'inline-block';
+            }
+            // Remove highlight from all level buttons
+            const levelButtons = document.querySelectorAll('#levelSelect button');
+            levelButtons.forEach(btn => btn.classList.remove('selected-level'));
+        }
+
         if (sectionId === 'stroopEffect') {
             document.getElementById('stroop-game-container').style.display = 'none'; // Hide game until start button
             document.getElementById('stroopStartBtn').style.display = 'inline-block'; // Ensure start button is visible for Stroop
