@@ -200,6 +200,7 @@ def extract_datetime_str(dt):
     """
     Extracts an ISO-formatted date-time string from Dialogflow parameter formats.
     Handles: string, list of string, dict with 'startTime', 'startDateTime', or 'date_time', list of dicts.
+    For reminder contexts, prefers 'endDateTime' over 'startDateTime' to get the actual reminder time.
     Returns: ISO string or None.
     """
     print(f"Debug: extract_datetime_str input: {dt}")
@@ -207,8 +208,13 @@ def extract_datetime_str(dt):
         dt = dt[0] if dt else None
         print(f"Debug: After list handling: {dt}")
     if isinstance(dt, dict):
-        # Handle 'startTime', 'startDateTime', and 'date_time' keys
-        dt = dt.get('startTime') or dt.get('startDateTime') or dt.get('date_time')
+        # For reminders, prefer endDateTime (actual reminder time) over startDateTime (current time)
+        if 'endDateTime' in dt:
+            dt = dt.get('endDateTime')
+            print(f"Debug: Using endDateTime for reminder: {dt}")
+        else:
+            # Handle 'startTime', 'startDateTime', and 'date_time' keys for other cases
+            dt = dt.get('startTime') or dt.get('startDateTime') or dt.get('date_time')
         print(f"Debug: After dict handling: {dt}")
     if isinstance(dt, str):
         try:
