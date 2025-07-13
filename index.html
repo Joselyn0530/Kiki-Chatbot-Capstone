@@ -426,6 +426,8 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    const scheduledReminderTimers = {}; // { reminderId: timeoutId }
+
     // 2. User ID Management - REMOVED: No user_client_id needed for reminders
 
     // 3. Setup Dialogflow Messenger
