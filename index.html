@@ -524,7 +524,7 @@
                 statusMessagesDiv.innerText = "❌ Notifications blocked. Tap the small icon near the website address and turn on notifications.";
             } else {
                 console.log('Notification permission dismissed.');
-                statusMessagesDiv.innerText = "Reminder notifications aren’t set up yet. Please enable in your browser settings.";
+                statusMessagesDiv.innerText = "Reminder notifications aren't set up yet. Please enable in your browser settings.";
             }
 
             // Schedule the message to disappear after 5 seconds
@@ -650,6 +650,18 @@
                 scheduleReminder(reminder.task, remindAt, reminderId);
             });
 
+            // Add this block to cancel timers for deleted reminders:
+            const currentReminderIds = new Set();
+            snapshot.forEach(doc => {
+                currentReminderIds.add(doc.id);
+            });
+            for (const reminderId in scheduledReminderTimers) {
+                if (!currentReminderIds.has(reminderId)) {
+                    clearTimeout(scheduledReminderTimers[reminderId]);
+                    delete scheduledReminderTimers[reminderId];
+                }
+            }
+
         } catch (error) {
             console.error("Error loading and scheduling reminders:", error);
             document.getElementById('status-messages').innerText = "Error loading reminders. Check console.";
@@ -661,15 +673,25 @@
         const now = new Date();
         const delay = remindAtDate.getTime() - now.getTime();
 
+        // Cancel any previous timer for this reminderId
+        if (scheduledReminderTimers[reminderId]) {
+            clearTimeout(scheduledReminderTimers[reminderId]);
+        }
+
         if (delay <= 0) {
             console.warn(`Reminder for "${task}" is in the past or current (${delay}ms), triggering immediately.`);
             displayNotification(task, reminderId);
+            delete scheduledReminderTimers[reminderId];
             return;
         }
 
-        setTimeout(() => {
+        // Schedule and store the timer
+        const timeoutId = setTimeout(() => {
             displayNotification(task, reminderId);
+            delete scheduledReminderTimers[reminderId]; // Clean up after firing
         }, delay);
+
+        scheduledReminderTimers[reminderId] = timeoutId;
     }
 
     // Display the browser notification (now includes custom HTML pop-up)
