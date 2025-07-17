@@ -574,9 +574,37 @@ def webhook():
                     }
                 ]
             })
-        date_time_str = parameters.get('date-time') 
+        
+        # --- START MODIFICATION FOR VAGUE TIME HANDLING (Add this block starting here) ---
+        date_time_param = parameters.get('date-time')
+        date_time_str = None  # Initialize to None for validated precise time
 
-        # Improved missing parameter handling
+        # Handle lists (Dialogflow sometimes returns a list)
+        if isinstance(date_time_param, list):
+            date_time_param = date_time_param[0] if date_time_param else None
+
+        # Handle dicts with time ranges (vague periods)
+        if isinstance(date_time_param, dict):
+            # Check for range keys
+            start_time_str = date_time_param.get('startTime') or date_time_param.get('startDateTime')
+            end_time_str = date_time_param.get('endTime') or date_time_param.get('endDateTime')
+            if start_time_str and end_time_str and start_time_str != end_time_str:
+                return jsonify({
+                    "fulfillmentText": "I can only set reminders for specific times, like '9 AM', '6 PM', or 'tomorrow at 4:30 PM', not general periods like 'late night' or 'tomorrow morning'. Please tell me the exact time."
+                })
+            elif start_time_str:
+                date_time_str = start_time_str
+        elif isinstance(date_time_param, str):
+            date_time_str = date_time_param
+        elif date_time_param is not None:
+            # Unexpected or missing
+            print("Missing or unexpected format for date-time parameter:", date_time_param)
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I couldn't understand the time for the reminder. Could you please specify a precise time?"
+            })
+        # --- END MODIFICATION FOR VAGUE TIME HANDLING (End this block here) ---
+
+        # Improved missing parameter handling (This part remains, now using the validated date_time_str)
         if not task and not date_time_str:
             return jsonify({
                 "fulfillmentText": "Sure! 😊 What should I remind you about?"
@@ -584,8 +612,7 @@ def webhook():
         elif not task and date_time_str:
             # Format the time for user-friendly display
             try:
-                dt_str = extract_datetime_str(date_time_str)
-                dt_obj = datetime.fromisoformat(str(dt_str))
+                dt_obj = datetime.fromisoformat(str(date_time_str))
                 user_friendly_time_str = dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
             except Exception:
                 user_friendly_time_str = str(date_time_str)
@@ -597,7 +624,7 @@ def webhook():
                         "name": f"{req['session']}/contexts/await_task",
                         "lifespanCount": 2,
                         "parameters": {
-                            "date-time": date_time_str
+                            "date-time": date_time_param  # Keep original raw parameter for context, if needed
                         }
                     }
                 ]
@@ -618,10 +645,22 @@ def webhook():
             })
         else:
             try:
-                print(f"Debug: Processing date_time_str: {date_time_str}")
-                dt_str = extract_datetime_str(date_time_str)
-                print(f"Debug: Extracted dt_str: {dt_str}")
-                reminder_dt_obj = datetime.fromisoformat(str(dt_str))
+                # Use the validated date_time_str directly here
+                print(f"Debug: Processing validated date_time_str: {date_time_str}")
+                reminder_dt_obj = datetime.fromisoformat(str(date_time_str))
+
+                # --- Check if the reminder time is in the past (in Malaysia timezone) ---
+                now_kl = datetime.now(KUALA_LUMPUR_TZ)
+                reminder_dt_kl = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ)
+                clarification_text = ""
+                if reminder_dt_kl < now_kl:
+                    # Move to next day
+                    reminder_dt_kl = reminder_dt_kl + timedelta(days=1)
+                    reminder_dt_obj = reminder_dt_kl.astimezone(reminder_dt_obj.tzinfo)
+                    user_friendly_time_str = reminder_dt_kl.strftime("%I:%M %p on %B %d, %Y")
+                    clarification_text = f"That time has already passed for today. I'll set your reminder for {user_friendly_time_str} instead. "
+                else:
+                    user_friendly_time_str = reminder_dt_kl.strftime("%I:%M %p on %B %d, %Y")
 
                 reminder_data = {
                     'task': task,
@@ -632,24 +671,22 @@ def webhook():
                 db.collection('reminders').add(reminder_data)
                 print(f"Reminder saved to Firestore: {reminder_data}")
 
-                user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
-
                 response = {
                     "fulfillmentMessages": [
-                            {"text": {"text": [f"Got it! I'll remind you to \"{task}\" at {user_friendly_time_str}."]}}
-                        ],
-                        "outputContexts": [
-                            {
-                                "name": f"{req['session']}/contexts/await_task",
-                                "lifespanCount": 0,
-                                "parameters": {}
-                            },
-                            {
-                                "name": f"{req['session']}/contexts/await_time",
-                                "lifespanCount": 0,
-                                "parameters": {}
-                            }
-                        ] + clear_all_update_contexts(session_id)
+                        {"text": {"text": [f"{clarification_text}Got it! I'll remind you to \"{task}\" at {user_friendly_time_str}."]}}
+                    ],
+                    "outputContexts": [
+                        {
+                            "name": f"{req['session']}/contexts/await_task",
+                            "lifespanCount": 0,
+                            "parameters": {}
+                        },
+                        {
+                            "name": f"{req['session']}/contexts/await_time",
+                            "lifespanCount": 0,
+                            "parameters": {}
+                        }
+                    ] + clear_all_update_contexts(session_id)
                 }
                 return jsonify(response)
 
@@ -913,14 +950,33 @@ def webhook():
     elif intent_display_name == 'update.reminder':
         parameters = req.get('queryResult', {}).get('parameters', {})
         task_to_update = parameters.get('task')
-        old_date_time_str = extract_datetime_str(parameters.get('old-date-time'))
-        new_date_time_str = extract_datetime_str(parameters.get('new-date-time'))
+        old_date_time_param = parameters.get('old-date-time')
+        new_date_time_param = parameters.get('new-date-time')
 
-        # Ensure old_date_time_str and new_date_time_str are strings, not lists
-        if isinstance(old_date_time_str, list):
-            old_date_time_str = old_date_time_str[0] if old_date_time_str else None
-        if isinstance(new_date_time_str, list):
-            new_date_time_str = new_date_time_str[0] if new_date_time_str else None
+        # --- START MODIFICATION FOR VAGUE TIME HANDLING (update.reminder) ---
+        def validate_datetime_param(dt_param):
+            dt_str = None
+            if isinstance(dt_param, list):
+                dt_param = dt_param[0] if dt_param else None
+            if isinstance(dt_param, dict):
+                start_time_str = dt_param.get('startTime') or dt_param.get('startDateTime')
+                end_time_str = dt_param.get('endTime') or dt_param.get('endDateTime')
+                if start_time_str and end_time_str and start_time_str != end_time_str:
+                    return None, True  # Vague
+                elif start_time_str:
+                    dt_str = start_time_str
+            elif isinstance(dt_param, str):
+                dt_str = dt_param
+            elif dt_param is not None:
+                return None, True  # Unexpected
+            return dt_str, False
+        old_date_time_str, old_vague = validate_datetime_param(old_date_time_param)
+        new_date_time_str, new_vague = validate_datetime_param(new_date_time_param)
+        if old_vague or new_vague:
+            return jsonify({
+                "fulfillmentText": "I can only update reminders for specific times, like '9 AM', '6 PM', or 'tomorrow at 4:30 PM', not general periods like 'late night' or 'tomorrow morning'. Please tell me the exact time."
+            })
+        # --- END MODIFICATION FOR VAGUE TIME HANDLING (update.reminder) ---
 
         # Check for generic task names
         GENERIC_TASK_KEYWORDS = {"reminder", "reminders", "the reminder", "the reminders", "my reminder", "my reminders"}
@@ -1490,6 +1546,29 @@ def webhook():
         parameters = req.get('queryResult', {}).get('parameters', {})
         date_time = parameters.get('date-time')
 
+        # --- START MODIFICATION FOR VAGUE TIME HANDLING (CaptureTimeIntent) ---
+        date_time_param = date_time
+        date_time_str = None
+        if isinstance(date_time_param, list):
+            date_time_param = date_time_param[0] if date_time_param else None
+        if isinstance(date_time_param, dict):
+            start_time_str = date_time_param.get('startTime') or date_time_param.get('startDateTime')
+            end_time_str = date_time_param.get('endTime') or date_time_param.get('endDateTime')
+            if start_time_str and end_time_str and start_time_str != end_time_str:
+                return jsonify({
+                    "fulfillmentText": "I can only set reminders for specific times, like '9 AM', '6 PM', or 'tomorrow at 4:30 PM', not general periods like 'late night' or 'tomorrow morning'. Please tell me the exact time."
+                })
+            elif start_time_str:
+                date_time_str = start_time_str
+        elif isinstance(date_time_param, str):
+            date_time_str = date_time_param
+        elif date_time_param is not None:
+            print("Missing or unexpected format for date-time parameter (CaptureTimeIntent):", date_time_param)
+            return jsonify({
+                "fulfillmentText": "I'm sorry, I couldn't understand the time for the reminder. Could you please specify a precise time?"
+            })
+        # --- END MODIFICATION FOR VAGUE TIME HANDLING (CaptureTimeIntent) ---
+
         # Get task from context
         context_list = req.get('queryResult', {}).get('outputContexts', [])
         task = None
@@ -1501,11 +1580,20 @@ def webhook():
         if task:
             task = task.strip().lower()
 
-        date_time_str = extract_datetime_str(date_time)
-
         if task and date_time_str and isinstance(date_time_str, str) and date_time_str.strip():
             try:
                 reminder_dt_obj = datetime.fromisoformat(date_time_str)
+                # --- Check if the reminder time is in the past (in Malaysia timezone) ---
+                now_kl = datetime.now(KUALA_LUMPUR_TZ)
+                reminder_dt_kl = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ)
+                clarification_text = ""
+                if reminder_dt_kl < now_kl:
+                    reminder_dt_kl = reminder_dt_kl + timedelta(days=1)
+                    reminder_dt_obj = reminder_dt_kl.astimezone(reminder_dt_obj.tzinfo)
+                    user_friendly_time_str = reminder_dt_kl.strftime("%I:%M %p on %B %d, %Y")
+                    clarification_text = f"That time has already passed for today. I'll set your reminder for {user_friendly_time_str} instead. "
+                else:
+                    user_friendly_time_str = reminder_dt_kl.strftime("%I:%M %p on %B %d, %Y")
                 reminder_data = {
                     'task': task,
                     'remind_at': reminder_dt_obj,
@@ -1513,9 +1601,8 @@ def webhook():
                     'created_at': firestore.SERVER_TIMESTAMP
                 }
                 db.collection('reminders').add(reminder_data)
-                user_friendly_time_str = reminder_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                 return jsonify({
-                    "fulfillmentText": f"All set! I'll remind you to \"{task}\" at {user_friendly_time_str}. ✅",
+                    "fulfillmentText": f"{clarification_text}All set! I'll remind you to \"{task}\" at {user_friendly_time_str}. ✅",
                     "outputContexts": [
                         {
                             "name": f"{req['session']}/contexts/await_task",
