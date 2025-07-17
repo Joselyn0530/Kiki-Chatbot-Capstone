@@ -9,6 +9,10 @@ import pytz
 import openai  # Add this import at the top with other imports
 from dateutil import parser
 from collections import defaultdict, deque
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 # --- START CREDENTIALS SETUP FOR RENDER ---
 firebase_key_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
@@ -268,10 +272,12 @@ def webhook():
     # --- Clear post-game chat history if context expired ---
     session_key_memory = f"{session_id}_memory"
     if 'post_game_memory' not in active_context_names and session_key_memory in POST_GAME_HISTORY:
+        logging.info(f"Removing post-game memory history for session: {session_key_memory}")
         del POST_GAME_HISTORY[session_key_memory]
 
     session_key_stroop = f"{session_id}_stroop"
     if 'post_game_stroop' not in active_context_names and session_key_stroop in POST_GAME_HISTORY:
+        logging.info(f"Removing post-game stroop history for session: {session_key_stroop}")
         del POST_GAME_HISTORY[session_key_stroop]
 
     user_message = req.get('queryResult', {}).get('queryText', '')
@@ -281,6 +287,7 @@ def webhook():
     # Handle OpenAiChat intent - Start chat mode
     if intent_display_name == 'OpenAiChat':
         ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
+        logging.info(f"[CONVERSATION_HISTORY][{session_id}] after storing user/assistant: {list(CONVERSATION_HISTORY[session_id])}")
         return jsonify({
             "fulfillmentText": ai_response,
             "outputContexts": [set_chat_mode_context(session_id)]
@@ -290,6 +297,7 @@ def webhook():
     elif intent_display_name == 'ContinueChatIntent':
         if is_chat_mode_active(req):
             ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
+            logging.info(f"[CONVERSATION_HISTORY][{session_id}] after storing user/assistant: {list(CONVERSATION_HISTORY[session_id])}")
             return jsonify({
                 "fulfillmentText": ai_response,
                 "outputContexts": [set_chat_mode_context(session_id)]
@@ -345,6 +353,7 @@ def webhook():
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
+        logging.info(f"[POST_GAME_HISTORY][{session_key}] after storing user/assistant: {list(POST_GAME_HISTORY[session_key])}")
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -373,6 +382,7 @@ def webhook():
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
+        logging.info(f"[POST_GAME_HISTORY][{session_key}] after storing user/assistant: {list(POST_GAME_HISTORY[session_key])}")
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -401,6 +411,7 @@ def webhook():
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
+        logging.info(f"[POST_GAME_HISTORY][{session_key}] after storing user/assistant: {list(POST_GAME_HISTORY[session_key])}")
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -429,6 +440,7 @@ def webhook():
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
+        logging.info(f"[POST_GAME_HISTORY][{session_key}] after storing user/assistant: {list(POST_GAME_HISTORY[session_key])}")
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -457,6 +469,7 @@ def webhook():
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
+        logging.info(f"[POST_GAME_HISTORY][{session_key}] after storing user/assistant: {list(POST_GAME_HISTORY[session_key])}")
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -485,6 +498,7 @@ def webhook():
         else:
             system_prompt = KIKI_SYSTEM_PROMPT
         reply = get_openai_response(user_message, session_key, system_prompt, 35, history_dict=POST_GAME_HISTORY)
+        logging.info(f"[POST_GAME_HISTORY][{session_key}] after storing user/assistant: {list(POST_GAME_HISTORY[session_key])}")
         return jsonify({
             "fulfillmentText": reply,
             "outputContexts": [{
@@ -503,6 +517,7 @@ def webhook():
             print("Sending to OpenAI...")
             ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
             print(f"OpenAI response: {ai_response}")
+            logging.info(f"[CONVERSATION_HISTORY][{session_id}] after storing user/assistant: {list(CONVERSATION_HISTORY[session_id])}")
             return jsonify({
                 "fulfillmentText": ai_response,
                 "outputContexts": [set_chat_mode_context(session_id)]
