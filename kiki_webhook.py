@@ -52,7 +52,7 @@ Your personality:
 - Show empathy and emotional support
 - Be encouraging and positive, but also realistic
 - Inject humor occasionally with playful lines like "You must have fruit powers 🍉 today!" or similar light-hearted expressions
-- Offer activity changes sometimes, such as "Wanna try a different game or just hang out and talk?"
+- Offer activity changes sometimes, such as "Wanna try a different game or just chill and chat?"
 
 When asked about yourself, you can say:
 "I'm Kiki, your friendly companion! I love chatting with you, playing games, and helping with reminders. I'm here to keep you company and make your day a bit brighter."
@@ -84,7 +84,19 @@ Important guidelines:
 
 Remember: You're a friendly companion, not a medical professional. Focus on emotional support and casual conversation.
 
-Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."""
+Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand.
+
+If you don't know something:
+If you're unsure or can't answer something, respond kindly and honestly
+Keep the tone warm and caring - never robotic or dismissive
+Offer a gentle pivot and invite the user to try something else
+Reassure them that you're still here and happy to chat
+Example phrases (elderly-specific support):
+"Hmm, I'm not too sure about that one... but I'm still here with you. Want to talk about something lighter?"
+"That's a bit beyond me for now, but I'd love to hear what's been on your mind today."
+"I might not have the answer, but I'm always happy to keep you company. Shall we chat about something else for a bit?"
+"I may not know that, but I'd love to hear if you've had a good cup of tea today. Or we could play a little game together?"
+"""
 
 # In-memory conversation history tracker (per session)
 CONVERSATION_HISTORY = defaultdict(lambda: deque(maxlen=6))
@@ -93,9 +105,11 @@ CONVERSATION_HISTORY = defaultdict(lambda: deque(maxlen=6))
 POST_GAME_HISTORY = defaultdict(lambda: deque(maxlen=6))
 
 # Add a helper to count post-game turns
-
 def get_postgame_turn_count(session_key):
-    # Count user turns in POST_GAME_HISTORY for this session_key
+    """
+    Count the number of user turns in POST_GAME_HISTORY for a given session_key.
+    Returns the number of messages from the user in the post-game chat history for that session.
+    """
     if session_key not in POST_GAME_HISTORY:
         return 0
     return sum(1 for msg in POST_GAME_HISTORY[session_key] if msg['role'] == 'user')
@@ -103,8 +117,12 @@ def get_postgame_turn_count(session_key):
 def get_openai_response(user_message, session_id, system_prompt, max_words=35, history_dict=None):
     """
     Get a response from OpenAI for chat interactions, using conversation history for context.
+    - user_message: The latest message from the user.
+    - session_id: The session identifier (used as the key for conversation history).
+    - system_prompt: The system prompt to define Kiki's personality and behavior.
+    - max_words: Maximum number of words in the AI's response.
+    - history_dict: Which conversation history to use (e.g., POST_GAME_HISTORY for post-game, CONVERSATION_HISTORY for general chat).
     Returns the AI response or a fallback message if there's an error.
-    history_dict: which conversation history to use (e.g., POST_GAME_HISTORY for post-game, CONVERSATION_HISTORY for general chat)
     """
     if not OPENAI_API_KEY:
         return "I'm having trouble connecting to my chat features right now. Let me help you with reminders or games instead!"
@@ -153,24 +171,24 @@ def is_chat_mode_active(req_payload):
     """
     Check if the user is currently in chat mode by looking for chat_mode context.
     Checks both input and output contexts to handle all scenarios.
+    Returns True if chat_mode context is active, otherwise False.
     """
     # Check input contexts (current active contexts)
     input_contexts = req_payload.get('queryResult', {}).get('inputContexts', [])
     for context in input_contexts:
         if 'chat_mode' in context.get('name', ''):
             return True
-    
     # Check output contexts (contexts being set in this turn)
     output_contexts = req_payload.get('queryResult', {}).get('outputContexts', [])
     for context in output_contexts:
         if 'chat_mode' in context.get('name', '') and context.get('lifespanCount', 0) > 0:
             return True
-    
     return False
 
 def set_chat_mode_context(session_id, lifespan=5):
     """
     Set the chat_mode context to indicate the user is in free-form chat.
+    Returns a context dictionary for Dialogflow.
     """
     return {
         "name": f"{session_id}/contexts/chat_mode",
@@ -181,6 +199,7 @@ def set_chat_mode_context(session_id, lifespan=5):
 def clear_chat_mode_context(session_id):
     """
     Clear the chat_mode context to exit free-form chat.
+    Returns a context dictionary for Dialogflow with lifespanCount 0.
     """
     return {
         "name": f"{session_id}/contexts/chat_mode",
@@ -190,6 +209,11 @@ def clear_chat_mode_context(session_id):
 
 # Helper function to get context parameter
 def get_context_parameter(req_payload, context_name_part, param_name):
+    """
+    Helper function to extract a parameter value from a Dialogflow context.
+    Searches both output and input contexts for a context name containing context_name_part.
+    Returns the value of param_name if found, otherwise None.
+    """
     for context in req_payload.get('queryResult', {}).get('outputContexts', []):
         if context_name_part in context.get('name', ''):
             if param_name in context.get('parameters', {}):
@@ -233,6 +257,10 @@ def extract_datetime_str(dt):
     return None
 
 def user_friendly_time(dt_str):
+    """
+    Converts an ISO date-time string to a user-friendly string format for display.
+    Returns a formatted string like '07:00 PM on July 11, 2025'.
+    """
     if not dt_str:
         return ""
     try:
@@ -243,6 +271,10 @@ def user_friendly_time(dt_str):
 
 # Helper to clear all update-related contexts
 def clear_all_update_contexts(session_id):
+    """
+    Helper to clear all update-related contexts for a session.
+    Returns a list of context dictionaries with lifespanCount set to 0.
+    """
     return [
         {"name": f"{session_id}/contexts/awaiting_deletion_confirmation", "lifespanCount": 0},
         {"name": f"{session_id}/contexts/awaiting_update_confirmation", "lifespanCount": 0},
@@ -253,6 +285,11 @@ def clear_all_update_contexts(session_id):
 
 @app.route('/', methods=['POST'])
 def webhook():
+    """
+    Main webhook endpoint for Dialogflow POST requests.
+    Handles all incoming user intents, manages session context, and routes messages to OpenAI or Firestore as needed.
+    Implements error handling, fallback, and session-based conversation tracking.
+    """
     req = request.get_json(silent=True, force=True)
     print(f"Dialogflow Request: {req}")
 
@@ -286,6 +323,7 @@ def webhook():
     
     # Handle OpenAiChat intent - Start chat mode
     if intent_display_name == 'OpenAiChat':
+        # User initiates free-form chat; send to OpenAI and activate chat mode context
         ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
         logging.info(f"[CONVERSATION_HISTORY][{session_id}] after storing user/assistant: {list(CONVERSATION_HISTORY[session_id])}")
         return jsonify({
@@ -296,6 +334,7 @@ def webhook():
     # Handle ContinueChatIntent - Continue chat in chat mode
     elif intent_display_name == 'ContinueChatIntent':
         if is_chat_mode_active(req):
+            # Continue chat if chat_mode context is active
             ai_response = get_openai_response(user_message, session_id, KIKI_SYSTEM_PROMPT)
             logging.info(f"[CONVERSATION_HISTORY][{session_id}] after storing user/assistant: {list(CONVERSATION_HISTORY[session_id])}")
             return jsonify({
@@ -303,6 +342,7 @@ def webhook():
                 "outputContexts": [set_chat_mode_context(session_id)]
             })
         else:
+            # If not in chat mode, prompt user to start chat mode
             return jsonify({
                 "fulfillmentText": "I'd love to chat with you! Just say 'Chat with me' to start a friendly conversation.",
                 "fulfillmentMessages": [
@@ -335,6 +375,7 @@ def webhook():
     
     # Handle PostGameChatMemoryIntent - Chat after Memory Match game
     elif intent_display_name == "PostGameChatMemoryIntent":
+        # User starts post-game chat after Memory Match; use special system prompt for first few turns
         session_key = f"{session_id}_memory"
         postgame_turns = get_postgame_turn_count(session_key)
         if postgame_turns < 2:
@@ -346,7 +387,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 2-3 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just chill and chat?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -364,6 +405,7 @@ def webhook():
 
     # Handle PostGameChatStroopIntent - Chat after Stroop Effect game
     elif intent_display_name == "PostGameChatStroopIntent":
+        # User starts post-game chat after Stroop Effect; use special system prompt for first few turns
         session_key = f"{session_id}_stroop"
         postgame_turns = get_postgame_turn_count(session_key)
         if postgame_turns < 2:
@@ -375,7 +417,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 2-3 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or just chill and chat?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -393,6 +435,7 @@ def webhook():
 
     # Continue Memory Match post-game chat
     elif intent_display_name == "ContinuePostGameChatMemory":
+        # User continues post-game chat after Memory Match; use special system prompt for first few turns
         session_key = f"{session_id}_memory"
         postgame_turns = get_postgame_turn_count(session_key)
         if postgame_turns < 2:
@@ -404,7 +447,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 2-3 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just chill and chat?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -422,6 +465,7 @@ def webhook():
 
     # Continue Stroop post-game chat
     elif intent_display_name == "ContinuePostGameChatStroop":
+        # User continues post-game chat after Stroop Effect; use special system prompt for first few turns
         session_key = f"{session_id}_stroop"
         postgame_turns = get_postgame_turn_count(session_key)
         if postgame_turns < 2:
@@ -433,7 +477,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 2-3 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or just chill and chat?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -451,6 +495,7 @@ def webhook():
 
     # Fallback during Memory Match post-game chat (dynamic OpenAI)
     elif intent_display_name == "FallbackDuringPostGameChatMemory":
+        # User enters unrecognized input during Memory Match post-game chat; use special system prompt for first few turns
         session_key = f"{session_id}_memory"
         postgame_turns = get_postgame_turn_count(session_key)
         if postgame_turns < 2:
@@ -462,7 +507,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 1-2 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or different level of Memory Match, or just chill and chat?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -480,6 +525,7 @@ def webhook():
 
     # Fallback during Stroop Effect post-game chat (dynamic OpenAI)
     elif intent_display_name == "FallbackDuringPostGameChatStroop":
+        # User enters unrecognized input during Stroop Effect post-game chat; use special system prompt for first few turns
         session_key = f"{session_id}_stroop"
         postgame_turns = get_postgame_turn_count(session_key)
         if postgame_turns < 2:
@@ -491,7 +537,7 @@ def webhook():
                 "Avoid repeating questions about the game. If the user has already answered several questions about the game, move on to other topics or offer to help. "
                 "Keep responses to 1-2 short sentences, and use playful, natural language. "
                 "Inject humor occasionally with playful lines like 'You must have fruit powers 🍉 today!' or similar light-hearted expressions. "
-                "Offer activity changes sometimes, such as 'Wanna try a different game or just hang out and talk?'"
+                "Offer activity changes sometimes, such as 'Wanna try a different game or just chill and chat?'"
                 "Ask follow-up questions to keep conversations engaging."
                 "Use simple, everyday English. Avoid big or complicated words. Make sure your sentences are easy to understand."
             )
@@ -509,6 +555,7 @@ def webhook():
 
     # Handle FallbackDuringChatIntent - Fallback only during chat mode
     elif intent_display_name == 'FallbackDuringChatIntent':
+        # User enters unrecognized input during chat mode; forward to OpenAI for a friendly fallback
         chat_mode_active = is_chat_mode_active(req)
         print(f"FallbackDuringChatIntent - Chat mode active: {chat_mode_active}")
         print(f"User message: '{user_message}'")
@@ -523,7 +570,7 @@ def webhook():
                 "outputContexts": [set_chat_mode_context(session_id)]
             })
         else:
-            # If not in chat mode, this shouldn't be triggered, but provide a fallback
+            # If not in chat mode, show friendly fallback with suggestions
             return jsonify({
                 "fulfillmentText": "I'm not sure what you mean. Would you like to set a reminder, play a game, or chat with me?",
                 "fulfillmentMessages": [
@@ -1131,6 +1178,7 @@ def webhook():
                         user_friendly_old_time_str = reminder_data['remind_at'].astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
                         
                         if new_date_time_str:
+                            # New time provided, proceed to confirmation
                             try:
                                 new_dt_obj = datetime.fromisoformat(new_date_time_str)
                                 user_friendly_new_time_str = new_dt_obj.astimezone(KUALA_LUMPUR_TZ).strftime("%I:%M %p on %B %d, %Y")
