@@ -946,9 +946,6 @@
         });
 
         intro.onexit(function() {
-            // Optional: You could set 'kiki_onboarding_completed' to 'true' here as well,
-            // if you want the tour not to show again even if the user exits early.
-            // For this implementation, we'll only mark as complete on 'oncomplete'.
             console.log('Onboarding tour exited.');
         });
 
@@ -1054,9 +1051,7 @@
 
       // Set background3.jpg for the Memory Match button
       const memoryBtn = [...document.querySelectorAll('.square-btn')].find(btn => btn.textContent.includes("Memory"));
-      if (memoryBtn) { // This will likely not work as there is no textContent for these buttons, only background image.
-                      // Consider using an ID or a data-attribute for selection if you need to manipulate specific game buttons.
-                      // For now, this line might not find anything if your buttons are purely background images.
+      if (memoryBtn) {
         memoryBtn.style.background = "url('background3.jpg') no-repeat center center";
         memoryBtn.style.backgroundSize = "cover";
         memoryBtn.style.color = "#fff";
@@ -1953,9 +1948,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (intentName === 'PostGameChatIntent') {
-      // Optional: if you use OpenAI API to respond to post-game discussion
       console.log('User wants to chat about game result.');
-      // You can trigger follow-up here if needed.
     }
   });
 });
